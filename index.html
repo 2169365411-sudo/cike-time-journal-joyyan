@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f5f3ee" />
+    <meta name="description" content="只属于你的今日任务与24小时记录。" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+    <title>此刻 · 时间记录</title>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">MY DAY</p>
+          <h1>此刻</h1>
+        </div>
+        <button class="icon-button" id="installButton" type="button" aria-label="安装到主屏幕" title="安装到主屏幕" hidden>＋</button>
+      </header>
+
+      <section class="sync-bar" id="syncBar">
+        <div><span class="sync-dot" id="syncDot"></span><span id="syncStatus">本机模式</span></div>
+        <button class="logout-button" id="emailConfirmButton" type="button">用 QQ 邮箱确认</button>
+        <button class="logout-button" id="retrySyncButton" type="button">连接云端</button>
+      </section>
+
+      <nav class="tabs" aria-label="主要视图">
+        <button class="tab is-active" data-view="tasks" type="button">今日任务</button>
+        <button class="tab" data-view="timeline" type="button">24 小时记录</button>
+        <button class="tab" data-view="stats" type="button">统计数据</button>
+        <button class="tab" data-view="books" type="button">阅读笔记</button>
+      </nav>
+
+      <section class="view is-visible" id="tasksView" aria-labelledby="tasksHeading">
+        <div class="section-heading">
+          <div>
+            <p class="date-label" id="todayLabel"></p>
+            <h2 id="tasksHeading">今天准备做什么？</h2>
+          </div>
+          <span class="progress" id="taskProgress">0 / 0</span>
+        </div>
+        <form class="entry-form" id="taskForm">
+          <input id="taskTitle" type="text" maxlength="80" placeholder="添加一件今天要做的事" autocomplete="off" required />
+          <input id="taskTime" type="time" aria-label="预计时间" />
+          <button class="primary-button" type="submit" aria-label="添加任务" title="添加任务">添加</button>
+        </form>
+        <div class="list" id="taskList"></div>
+        <div class="empty-state" id="taskEmpty">先写下今天最重要的一件事。</div>
+      </section>
+
+      <section class="view" id="timelineView" aria-labelledby="timelineHeading">
+        <div class="section-heading">
+          <div>
+            <p class="date-label" id="timelineDateLabel"></p>
+            <h2 id="timelineHeading">这段时间在做什么？</h2>
+          </div>
+          <span class="time-total" id="timeTotal">0 小时</span>
+        </div>
+        <form class="entry-form timeline-form" id="recordForm">
+          <div class="time-fields">
+            <input id="recordStart" type="time" aria-label="开始时间" required />
+            <span>至</span>
+            <input id="recordEnd" type="time" aria-label="结束时间" required />
+          </div>
+          <input id="recordTitle" type="text" maxlength="80" placeholder="记录这段时间做了什么" autocomplete="off" required />
+          <select id="recordCategory" aria-label="事件分类">
+            <option value="money">钱</option>
+            <option value="learning">学习</option>
+            <option value="network">人脉</option>
+            <option value="fun">娱乐</option>
+          </select>
+          <button class="primary-button" type="submit" aria-label="记录时间" title="记录时间">记录</button>
+        </form>
+        <div class="timeline" id="recordList"></div>
+        <div class="empty-state" id="recordEmpty">还没有时间记录。完成一段时间后，回来写下它。</div>
+      </section>
+
+      <section class="view" id="statsView" aria-labelledby="statsHeading">
+        <div class="section-heading">
+          <div><p class="date-label" id="statsDateLabel"></p><h2 id="statsHeading">时间花在哪里？</h2></div>
+          <span class="time-total" id="statsTotal">0 小时</span>
+        </div>
+        <div class="stats-grid">
+          <article class="chart-panel">
+            <div class="chart-title"><span>每日时长</span><small>今天</small></div>
+            <div class="donut-wrap"><div class="donut" id="dailyDonut"><div class="donut-center" id="dailyTotal">0h</div></div></div>
+            <div class="legend" id="dailyLegend"></div>
+          </article>
+          <article class="chart-panel">
+            <div class="chart-title"><span>总时长</span><small>全部记录</small></div>
+            <div class="donut-wrap"><div class="donut" id="totalDonut"><div class="donut-center" id="allTotal">0h</div></div></div>
+            <div class="legend" id="totalLegend"></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="view" id="booksView" aria-labelledby="booksHeading">
+        <div class="section-heading">
+          <div><p class="date-label">READING ARCHIVE</p><h2 id="booksHeading">读过的书，留下点什么</h2></div>
+          <button class="primary-button compact-button" id="newBookButton" type="button">新建书籍</button>
+        </div>
+        <div class="book-layout">
+          <aside class="book-list" id="bookList"></aside>
+          <div class="book-detail" id="bookDetail">
+            <div class="empty-state">先新建一本书，开始记录你的阅读。</div>
+          </div>
+        </div>
+      </section>
+
+      <footer class="footer-note">所有内容只保存在这台设备上</footer>
+    </main>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="app.js?v=15"></script>
+  </body>
+</html>
