@@ -7,7 +7,7 @@ const saveLocal = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
 const SUPABASE_URL = "https://wacwjwtmmziakklcyuvt.supabase.co";
 const SUPABASE_KEY = "sb_publishable_WygT01COp2jBZOKQMmQt-A_SQfVzgI5";
 const OWNER_EMAIL = "2169365411@qq.com";
-const PUBLIC_APP_URL = "https://cike-time-journal-joyyan.able-wolf-9811.chatgpt.site/";
+const PUBLIC_APP_URL = "https://2169365411-sudo.github.io/cike-time-journal-joyyan/";
 const MIGRATION_KEY = "time-block-pending-migration";
 const cloud = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY);
 let cloudUser = null;
