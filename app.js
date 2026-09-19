@@ -7,6 +7,7 @@ const saveLocal = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
 const SUPABASE_URL = "https://wacwjwtmmziakklcyuvt.supabase.co";
 const SUPABASE_KEY = "sb_publishable_WygT01COp2jBZOKQMmQt-A_SQfVzgI5";
 const OWNER_EMAIL = "2169365411@qq.com";
+const PUBLIC_APP_URL = "https://cike-time-journal-joyyan.able-wolf-9811.chatgpt.site/";
 const MIGRATION_KEY = "time-block-pending-migration";
 const cloud = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY);
 let cloudUser = null;
@@ -21,7 +22,24 @@ let selectedBookId = state.books[0]?.id || null;
 function setSyncStatus(text, online = false) { $("#syncStatus").textContent = text; $("#syncDot").classList.toggle("is-online", online); }
 const pendingMigration = () => { try { return JSON.parse(localStorage.getItem(MIGRATION_KEY) || "null"); } catch { return null; } };
 const isOwner = () => cloudUser?.email?.toLowerCase() === OWNER_EMAIL;
-const emailRedirectUrl = () => /^https?:$/.test(window.location.protocol) ? `${window.location.origin}${window.location.pathname}` : "";
+function emailRedirectUrl(migration) {
+  const url = new URL(PUBLIC_APP_URL);
+  if (migration) {
+    url.searchParams.set("migration_source", migration.sourceUserId);
+    url.searchParams.set("migration_token", migration.tokenHash);
+  }
+  return url.href;
+}
+function captureMigrationFromUrl() {
+  const url = new URL(window.location.href);
+  const sourceUserId = url.searchParams.get("migration_source");
+  const tokenHash = url.searchParams.get("migration_token");
+  if (!sourceUserId || !tokenHash) return;
+  localStorage.setItem(MIGRATION_KEY, JSON.stringify({ sourceUserId, tokenHash }));
+  url.searchParams.delete("migration_source");
+  url.searchParams.delete("migration_token");
+  history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+}
 async function hashToken(token) { const bytes = new TextEncoder().encode(token); const hash = await crypto.subtle.digest("SHA-256", bytes); return Array.from(new Uint8Array(hash)).map((byte) => byte.toString(16).padStart(2, "0")).join(""); }
 function blobToDataUrl(blob) { return new Promise((resolve) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.readAsDataURL(blob); }); }
 async function cacheBookImagesForMigration() {
@@ -94,11 +112,10 @@ async function deleteNoteFromCloud(note) {
 }
 async function prepareOwnerLogin() {
   if (!cloud || isOwner()) return;
-  const redirectUrl = emailRedirectUrl();
-  if (!redirectUrl) { setSyncStatus("请先用 http 地址打开网页，再用 QQ 邮箱确认"); return; }
   const button = $("#emailConfirmButton");
   button.disabled = true;
   try {
+    let migration = pendingMigration();
     if (cloudUser?.is_anonymous) {
       setSyncStatus("正在准备迁移数据");
       await cacheBookImagesForMigration();
@@ -107,13 +124,14 @@ async function prepareOwnerLogin() {
       const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
       const { error } = await cloud.from("account_migrations").upsert({ source_user_id: cloudUser.id, token_hash: tokenHash, expires_at: expiresAt });
       if (error) { setSyncStatus(`迁移准备失败：${error.message}`); return; }
-      localStorage.setItem(MIGRATION_KEY, JSON.stringify({ sourceUserId: cloudUser.id, tokenHash, expiresAt }));
+      migration = { sourceUserId: cloudUser.id, tokenHash, expiresAt };
+      localStorage.setItem(MIGRATION_KEY, JSON.stringify(migration));
       await cloud.auth.signOut();
       cloudUser = null;
       updateAuthUI();
     }
     setSyncStatus("正在发送 QQ 邮箱确认邮件");
-    const { error } = await cloud.auth.signInWithOtp({ email: OWNER_EMAIL, options: { emailRedirectTo: redirectUrl, shouldCreateUser: false } });
+    const { error } = await cloud.auth.signInWithOtp({ email: OWNER_EMAIL, options: { emailRedirectTo: emailRedirectUrl(migration), shouldCreateUser: false } });
     setSyncStatus(error ? `邮箱确认失败：${error.message}` : "确认邮件已发送，请打开 QQ 邮箱里的链接");
   } finally { button.disabled = false; }
 }
@@ -131,6 +149,7 @@ async function completePendingMigration() {
 }
 async function initCloud() {
   if (!cloud) { setSyncStatus("本机模式"); return; }
+  captureMigrationFromUrl();
   const { data } = await cloud.auth.getSession();
   cloudUser = data.session?.user || null;
   updateAuthUI();
