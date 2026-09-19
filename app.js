@@ -9,7 +9,15 @@ const SUPABASE_KEY = "sb_publishable_WygT01COp2jBZOKQMmQt-A_SQfVzgI5";
 const OWNER_EMAIL = "2169365411@qq.com";
 const PUBLIC_APP_URL = "https://2169365411-sudo.github.io/cike-time-journal-joyyan/";
 const MIGRATION_KEY = "time-block-pending-migration";
-const cloud = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY);
+const cloud = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: {
+    storage: window.localStorage,
+    storageKey: "cike-time-journal-auth",
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true
+  }
+});
 let cloudUser = null;
 const save = () => { saveLocal(); syncToCloud(); };
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
