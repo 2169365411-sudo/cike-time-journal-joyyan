@@ -130,29 +130,9 @@ async function prepareOwnerLogin() {
       cloudUser = null;
       updateAuthUI();
     }
-    setSyncStatus("正在发送 QQ 邮箱验证码");
-    const { error } = await cloud.auth.signInWithOtp({ email: OWNER_EMAIL, options: { shouldCreateUser: false } });
-    setSyncStatus(error ? `验证码发送失败：${error.message}` : "验证码已发送，请在此页面输入 QQ 邮箱中的验证码");
-  } finally { button.disabled = false; }
-}
-async function verifyOwnerCode(event) {
-  event.preventDefault();
-  if (!cloud || isOwner()) return;
-  const input = $("#emailCodeInput");
-  const button = $("#emailCodeSubmit");
-  const token = input.value.replace(/\s/g, "");
-  if (!token) { setSyncStatus("请输入 QQ 邮箱中的验证码"); return; }
-  button.disabled = true;
-  try {
-    setSyncStatus("正在确认验证码");
-    const { data, error } = await cloud.auth.verifyOtp({ email: OWNER_EMAIL, token, type: "email" });
-    if (error) { setSyncStatus(`验证码确认失败：${error.message}`); return; }
-    cloudUser = data.user;
-    input.value = "";
-    updateAuthUI();
-    await completePendingMigration();
-    await loadFromCloud();
-    await loadBooksFromCloud();
+    setSyncStatus("正在发送 QQ 邮箱登录链接");
+    const { error } = await cloud.auth.signInWithOtp({ email: OWNER_EMAIL, options: { emailRedirectTo: emailRedirectUrl(migration), shouldCreateUser: false } });
+    setSyncStatus(error ? `登录链接发送失败：${error.message}` : "链接已发送，请复制 QQ 邮箱中的登录链接并粘贴到 Safari 打开");
   } finally { button.disabled = false; }
 }
 async function completePendingMigration() {
@@ -178,9 +158,9 @@ async function initCloud() {
     await loadFromCloud();
     await loadBooksFromCloud();
   } else if (pendingMigration()) {
-    setSyncStatus("请发送并输入 QQ 邮箱验证码");
+    setSyncStatus("请用 QQ 邮箱登录");
   } else {
-    setSyncStatus("请发送并输入 QQ 邮箱验证码");
+    setSyncStatus("请用 QQ 邮箱登录");
   }
   cloud.auth.onAuthStateChange(async (_event, session) => { cloudUser = session?.user || null; updateAuthUI(); if (cloudUser) { await completePendingMigration(); await loadFromCloud(); await loadBooksFromCloud(); } });
 }
@@ -198,13 +178,12 @@ function updateAuthUI() {
   const pending = !!pendingMigration();
   const signedIn = isOwner();
   $("#emailConfirmButton").hidden = signedIn;
-  $("#emailConfirmButton").textContent = pending ? "重新发送验证码" : "发送 QQ 验证码";
-  $("#emailCodeForm").hidden = signedIn;
+  $("#emailConfirmButton").textContent = pending ? "重新发送登录链接" : "发送 QQ 登录链接";
   $("#retrySyncButton").hidden = !cloudUser;
   $("#retrySyncButton").textContent = "立即同步";
   setSyncStatus(
     cloudUser ? (signedIn ? "已登录 QQ 邮箱" : "正在迁移旧数据") :
-    "请发送并输入 QQ 邮箱验证码",
+    "请用 QQ 邮箱登录",
     signedIn
   );
 }
@@ -272,7 +251,6 @@ $("#todayLabel").textContent = formatDate();
 $("#timelineDateLabel").textContent = formatDate();
 $("#statsDateLabel").textContent = formatDate();
 $("#emailConfirmButton").addEventListener("click", prepareOwnerLogin);
-$("#emailCodeForm").addEventListener("submit", verifyOwnerCode);
 $("#retrySyncButton").addEventListener("click", async () => {
   if (cloudUser) {
     await syncToCloud();
