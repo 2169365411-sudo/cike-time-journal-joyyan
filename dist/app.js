@@ -153,7 +153,15 @@ async function initCloud() {
   const { data } = await cloud.auth.getSession();
   cloudUser = data.session?.user || null;
   updateAuthUI();
-  if (cloudUser) { await completePendingMigration(); await loadFromCloud(); await loadBooksFromCloud(); } else if (pendingMigration()) { setSyncStatus("请打开 QQ 邮箱完成确认"); } else { await startAnonymousSession(); }
+  if (cloudUser) {
+    await completePendingMigration();
+    await loadFromCloud();
+    await loadBooksFromCloud();
+  } else if (pendingMigration()) {
+    setSyncStatus("请打开 QQ 邮箱完成确认");
+  } else {
+    setSyncStatus("请用 QQ 邮箱登录");
+  }
   cloud.auth.onAuthStateChange(async (_event, session) => { cloudUser = session?.user || null; updateAuthUI(); if (cloudUser) { await completePendingMigration(); await loadFromCloud(); await loadBooksFromCloud(); } });
 }
 async function startAnonymousSession() {
@@ -168,10 +176,15 @@ async function startAnonymousSession() {
 }
 function updateAuthUI() {
   const pending = !!pendingMigration();
-  $("#emailConfirmButton").hidden = isOwner();
-  $("#emailConfirmButton").textContent = pending ? "重新发送确认邮件" : "用 QQ 邮箱确认";
-  $("#retrySyncButton").textContent = cloudUser ? "立即同步" : "重新连接";
-  setSyncStatus(cloudUser ? (isOwner() ? "已确认 QQ 邮箱" : "云端已连接（匿名）") : (pending ? "请打开 QQ 邮箱完成确认" : "本机模式"), !!cloudUser);
+  const signedIn = isOwner();
+  $("#emailConfirmButton").hidden = signedIn;
+  $("#emailConfirmButton").textContent = pending ? "重新发送确认邮件" : "用 QQ 邮箱登录";
+  $("#retrySyncButton").textContent = cloudUser ? "立即同步" : "发送登录链接";
+  setSyncStatus(
+    cloudUser ? (signedIn ? "已登录 QQ 邮箱" : "正在迁移旧数据") :
+    (pending ? "请打开 QQ 邮箱完成确认" : "请用 QQ 邮箱登录"),
+    signedIn
+  );
 }
 
 function renderTasks() {
@@ -237,7 +250,14 @@ $("#todayLabel").textContent = formatDate();
 $("#timelineDateLabel").textContent = formatDate();
 $("#statsDateLabel").textContent = formatDate();
 $("#emailConfirmButton").addEventListener("click", prepareOwnerLogin);
-$("#retrySyncButton").addEventListener("click", async () => { if (cloudUser) { await syncToCloud(); await syncBooksToCloud(); } else if (pendingMigration()) { await prepareOwnerLogin(); } else { await startAnonymousSession(); } });
+$("#retrySyncButton").addEventListener("click", async () => {
+  if (cloudUser) {
+    await syncToCloud();
+    await syncBooksToCloud();
+  } else {
+    await prepareOwnerLogin();
+  }
+});
 $("#newBookButton").addEventListener("click", () => renderBooks(true));
 document.addEventListener("click", (event) => {
   const bookButton = event.target.closest("[data-book-select]");
