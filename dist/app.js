@@ -110,14 +110,12 @@ async function prepareOwnerLogin() {
       localStorage.setItem(MIGRATION_KEY, JSON.stringify({ sourceUserId: cloudUser.id, tokenHash, expiresAt }));
       await cloud.auth.signOut();
       cloudUser = null;
+      updateAuthUI();
     }
     setSyncStatus("正在发送 QQ 邮箱确认邮件");
     const { error } = await cloud.auth.signInWithOtp({ email: OWNER_EMAIL, options: { emailRedirectTo: redirectUrl, shouldCreateUser: false } });
     setSyncStatus(error ? `邮箱确认失败：${error.message}` : "确认邮件已发送，请打开 QQ 邮箱里的链接");
-  } finally {
-    updateAuthUI();
-    button.disabled = false;
-  }
+  } finally { button.disabled = false; }
 }
 async function completePendingMigration() {
   const pending = pendingMigration();
