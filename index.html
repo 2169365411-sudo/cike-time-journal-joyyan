@@ -7,7 +7,7 @@
     <meta name="description" content="只属于你的今日任务与24小时记录。" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=2" />
+    <link rel="stylesheet" href="styles.css?v=3" />
     <title>此刻 · 时间记录</title>
   </head>
   <body>
@@ -22,9 +22,13 @@
 
       <section class="sync-bar" id="syncBar">
         <div><span class="sync-dot" id="syncDot"></span><span id="syncStatus">本机模式</span></div>
-        <button class="logout-button" id="emailConfirmButton" type="button">用 QQ 邮箱登录</button>
-        <button class="logout-button" id="retrySyncButton" type="button">发送登录链接</button>
+        <button class="logout-button" id="emailConfirmButton" type="button">发送 QQ 验证码</button>
+        <button class="logout-button" id="retrySyncButton" type="button" hidden>立即同步</button>
       </section>
+      <form class="auth-code-form" id="emailCodeForm">
+        <input id="emailCodeInput" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="输入 QQ 邮箱中的验证码" aria-label="QQ 邮箱验证码" />
+        <button class="primary-button" id="emailCodeSubmit" type="submit">确认登录</button>
+      </form>
 
       <nav class="tabs" aria-label="主要视图">
         <button class="tab is-active" data-view="tasks" type="button">今日任务</button>
@@ -112,6 +116,6 @@
       <footer class="footer-note">所有内容只保存在这台设备上</footer>
     </main>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=19"></script>
+    <script src="app.js?v=20"></script>
   </body>
 </html>

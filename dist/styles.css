@@ -11,6 +11,9 @@ button { cursor:pointer; }
 .sync-dot.is-online { background:#55b96b; }
 .logout-button { border:1px solid var(--line); border-radius:7px; background:transparent; color:var(--ink); padding:8px 11px; font-size:12px; font-weight:700; }
 .logout-button:hover { border-color:var(--accent); color:var(--accent); }
+.auth-code-form { display:flex; gap:8px; margin:-14px 0 24px; }
+.auth-code-form input { flex:1; }
+.auth-code-form .primary-button { height:42px; }
 .eyebrow { margin:0 0 5px; color:var(--accent); font-size:11px; font-weight:700; letter-spacing:.16em; }
 h1,h2,p { margin:0; }
 h1 { font:600 34px/1.05 Georgia, "Songti SC", serif; letter-spacing:0; }
@@ -96,4 +99,4 @@ select { min-width:100px; border:1px solid var(--line); border-radius:8px; backg
 .note-copy img { display:block; width:min(100%, 360px); max-height:300px; margin-top:8px; border-radius:6px; object-fit:cover; }
 .note-empty,.book-empty { color:var(--muted); font-size:13px; }
 .footer-note { margin-top:46px; color:#aaa9a2; font-size:12px; text-align:center; }
-@media (max-width:560px) { .app-shell { padding:26px 16px 22px; } h2 { font-size:21px; } .sync-bar { align-items:center; margin-top:-8px; } .entry-form { flex-wrap:wrap; } .entry-form > input:first-child,.timeline-form > input { flex-basis:calc(100% - 66px); } .entry-form input[type=time] { flex:1; width:auto; } .timeline-form .time-fields { order:2; flex:1; } .timeline-form > input { order:1; } .timeline-form select { order:2; flex:1; } .timeline-form .primary-button { order:3; } .record-time { width:92px; flex-basis:92px; } .stats-grid,.book-layout { grid-template-columns:1fr; } .donut { width:150px; height:150px; } .book-list { grid-template-columns:repeat(2,minmax(0,1fr)); } .book-detail { padding:15px; } .book-head { flex-direction:column; } }
+@media (max-width:560px) { .app-shell { padding:26px 16px 22px; } h2 { font-size:21px; } .sync-bar { align-items:center; margin-top:-8px; } .auth-code-form { margin-top:-14px; } .entry-form { flex-wrap:wrap; } .entry-form > input:first-child,.timeline-form > input { flex-basis:calc(100% - 66px); } .entry-form input[type=time] { flex:1; width:auto; } .timeline-form .time-fields { order:2; flex:1; } .timeline-form > input { order:1; } .timeline-form select { order:2; flex:1; } .timeline-form .primary-button { order:3; } .record-time { width:92px; flex-basis:92px; } .stats-grid,.book-layout { grid-template-columns:1fr; } .donut { width:150px; height:150px; } .book-list { grid-template-columns:repeat(2,minmax(0,1fr)); } .book-detail { padding:15px; } .book-head { flex-direction:column; } }
