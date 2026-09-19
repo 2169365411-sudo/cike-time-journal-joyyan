@@ -103,7 +103,7 @@ returns boolean
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $migration$
 declare
   target_user_id uuid := auth.uid();
   valid_token boolean;
@@ -120,6 +120,7 @@ begin
   delete from public.account_migrations where source_user_id = p_source_user_id;
   return true;
 end;
+$migration$;
 
 revoke all on function public.claim_anonymous_migration(uuid, text) from public;
 grant execute on function public.claim_anonymous_migration(uuid, text) to authenticated;
