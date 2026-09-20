@@ -1,8 +1,11 @@
 const STORAGE_KEY = "time-block-pwa-v1";
 const state = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{"tasks":[],"records":[]}');
 state.books ||= [];
+state.dailySummaries ||= [];
 const $ = (selector) => document.querySelector(selector);
-const todayKey = () => new Date().toISOString().slice(0, 10);
+const localDateKey = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+const todayKey = () => localDateKey();
+const dateFromKey = (value) => new Date(`${value}T00:00:00`);
 const saveLocal = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 const SUPABASE_URL = "https://wacwjwtmmziakklcyuvt.supabase.co";
 const SUPABASE_KEY = "sb_publishable_WygT01COp2jBZOKQMmQt-A_SQfVzgI5";
@@ -21,7 +24,9 @@ const cloud = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY, {
 let cloudUser = null;
 const save = () => { saveLocal(); syncToCloud(); };
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-const formatDate = () => new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric", weekday: "long" }).format(new Date());
+let selectedDate = todayKey();
+let calendarMonth = new Date(dateFromKey(selectedDate).getFullYear(), dateFromKey(selectedDate).getMonth(), 1);
+const formatDate = (value = selectedDate) => new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric", weekday: "long" }).format(dateFromKey(value));
 const minutes = (time) => { const [h, m] = time.split(":").map(Number); return h * 60 + m; };
 const categories = { money: { label: "钱", color: "#f4d34f" }, learning: { label: "学习", color: "#72c579" }, network: { label: "人脉", color: "#ef5b56" }, fun: { label: "娱乐", color: "#ed82b4" } };
 const categoryData = (records) => Object.keys(categories).map((key) => ({ key, ...categories[key], value: records.filter((record) => (record.category || "fun") === key).reduce((sum, record) => sum + Math.max(0, minutes(record.end) - minutes(record.start)), 0) }));
@@ -62,17 +67,50 @@ async function syncToCloud() {
   setSyncStatus("正在同步", true);
   const tasks = state.tasks.map((task) => ({ id: task.id, user_id: cloudUser.id, title: task.title, planned_time: task.time || null, date: task.date, done: task.done }));
   const records = state.records.map((record) => ({ id: record.id, user_id: cloudUser.id, title: record.title, start_time: record.start, end_time: record.end, category: record.category || "fun", date: record.date }));
-  const [taskResult, recordResult] = await Promise.all([cloud.from("time_tasks").upsert(tasks), cloud.from("time_records").upsert(records)]);
+  const [taskResult, recordResult] = await Promise.all([
+    tasks.length ? cloud.from("time_tasks").upsert(tasks) : Promise.resolve({ error: null }),
+    records.length ? cloud.from("time_records").upsert(records) : Promise.resolve({ error: null })
+  ]);
   setSyncStatus(taskResult.error || recordResult.error ? "同步失败" : "已同步", !(taskResult.error || recordResult.error));
 }
 async function loadFromCloud() {
   if (!cloudUser || !cloud) return;
   setSyncStatus("读取云端", true);
-  const [taskResult, recordResult] = await Promise.all([cloud.from("time_tasks").select("*"), cloud.from("time_records").select("*")]);
+  const [taskResult, recordResult, summaryResult] = await Promise.all([
+    cloud.from("time_tasks").select("*"),
+    cloud.from("time_records").select("*"),
+    cloud.from("daily_summaries").select("*")
+  ]);
   if (taskResult.error || recordResult.error) { setSyncStatus("同步失败"); return; }
   state.tasks = taskResult.data.map((task) => ({ id: task.id, title: task.title, time: task.planned_time || "", date: task.date, done: task.done }));
   state.records = recordResult.data.map((record) => ({ id: record.id, title: record.title, start: record.start_time, end: record.end_time, category: record.category, date: record.date }));
-  saveLocal(); renderTasks(); renderRecords(); renderStats(); setSyncStatus("已同步", true);
+  if (!summaryResult.error) state.dailySummaries = summaryResult.data.map((summary) => ({ id: summary.id, date: summary.date, slot: summary.slot, content: summary.content }));
+  saveLocal(); renderTasks(); renderRecords(); renderStats(); renderDailySummaries(); renderDateControls();
+  setSyncStatus(summaryResult.error ? "日程已同步；请更新总结数据表" : "已同步", !summaryResult.error);
+}
+async function syncRecordToCloud(record) {
+  if (!cloudUser || !cloud) return;
+  setSyncStatus("正在同步", true);
+  const { error } = await cloud.from("time_records").upsert({ id: record.id, user_id: cloudUser.id, title: record.title, start_time: record.start, end_time: record.end, category: record.category || "fun", date: record.date });
+  setSyncStatus(error ? "记录同步失败" : "已同步", !error);
+}
+async function deleteRecordFromCloud(id) {
+  if (!cloudUser || !cloud) return;
+  setSyncStatus("正在删除", true);
+  const { error } = await cloud.from("time_records").delete().eq("id", id);
+  setSyncStatus(error ? "删除同步失败" : "已同步", !error);
+}
+async function syncDailySummaryToCloud(summary) {
+  if (!cloudUser || !cloud) return;
+  setSyncStatus("正在同步", true);
+  const { error } = await cloud.from("daily_summaries").upsert({ id: summary.id, user_id: cloudUser.id, date: summary.date, slot: summary.slot, content: summary.content }, { onConflict: "user_id,date,slot" });
+  setSyncStatus(error ? "总结同步失败；请更新数据表" : "已同步", !error);
+}
+async function deleteDailySummaryFromCloud(summary) {
+  if (!cloudUser || !cloud) return;
+  setSyncStatus("正在删除", true);
+  const { error } = await cloud.from("daily_summaries").delete().eq("id", summary.id);
+  setSyncStatus(error ? "总结同步失败；请更新数据表" : "已同步", !error);
 }
 async function signedImage(path) {
   if (!path || !cloud) return "";
@@ -210,12 +248,56 @@ function renderTasks() {
 }
 
 function renderRecords() {
-  const records = state.records.filter((record) => record.date === todayKey()).sort((a, b) => a.start.localeCompare(b.start));
+  const records = state.records.filter((record) => record.date === selectedDate).sort((a, b) => a.start.localeCompare(b.start));
   $("#recordList").innerHTML = records.map((record) => { const category = categories[record.category] || categories.fun; return `
-    <div class="record-item" style="--category:${category.color}"><div class="record-time">${record.start} - ${record.end}</div><div class="item-main"><div class="item-title">${escapeHtml(record.title)}</div><div class="item-meta">${category.label}</div></div><button class="delete-button" type="button" data-record-delete="${record.id}" aria-label="删除记录" title="删除记录">×</button></div>`; }).join("");
+    <div class="record-item" data-record-card="${record.id}" style="--category:${category.color}"><div class="record-time">${record.start} - ${record.end}</div><div class="item-main"><div class="item-title">${escapeHtml(record.title)}</div><div class="item-meta">${category.label}</div></div><div class="record-actions"><button class="edit-button" type="button" data-record-edit="${record.id}" aria-label="编辑记录" title="编辑记录">✎</button><button class="delete-button" type="button" data-record-delete="${record.id}" aria-label="删除记录" title="删除记录">×</button></div></div>`; }).join("");
   $("#recordEmpty").hidden = records.length > 0;
   const total = records.reduce((sum, record) => sum + Math.max(0, minutes(record.end) - minutes(record.start)), 0);
   $("#timeTotal").textContent = `${(total / 60).toFixed(total % 60 ? 1 : 0)} 小时`;
+}
+
+function renderDateControls() {
+  $("#timelineDateLabel").textContent = formatDate(selectedDate);
+  $("#nextDateButton").disabled = selectedDate >= todayKey();
+}
+function setSelectedDate(value) {
+  if (!value || value > todayKey()) return;
+  selectedDate = value;
+  calendarMonth = new Date(dateFromKey(value).getFullYear(), dateFromKey(value).getMonth(), 1);
+  renderDateControls(); renderRecords(); renderDailySummaries(); renderStats();
+}
+function activeDateKeys() {
+  return new Set([
+    ...state.records.map((record) => record.date),
+    ...state.dailySummaries.filter((summary) => summary.content?.trim()).map((summary) => summary.date)
+  ]);
+}
+function renderCalendar() {
+  const year = calendarMonth.getFullYear();
+  const month = calendarMonth.getMonth();
+  const firstDay = new Date(year, month, 1).getDay();
+  const days = new Date(year, month + 1, 0).getDate();
+  const today = todayKey();
+  const activeDates = activeDateKeys();
+  $("#calendarMonthLabel").textContent = `${year}年${month + 1}月`;
+  $("#nextMonthButton").disabled = new Date(year, month + 1, 1) > new Date(dateFromKey(today).getFullYear(), dateFromKey(today).getMonth(), 1);
+  $("#calendarGrid").innerHTML = `${"<span></span>".repeat(firstDay)}${Array.from({ length: days }, (_, index) => {
+    const day = index + 1;
+    const key = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const selected = key === selectedDate ? " is-selected" : "";
+    const current = key === today ? " is-today" : "";
+    const disabled = key > today ? " disabled" : "";
+    return `<button class="calendar-day${selected}${current}" type="button" data-calendar-date="${key}"${disabled}>${day}${activeDates.has(key) ? '<span class="calendar-dot"></span>' : ""}</button>`;
+  }).join("")}`;
+}
+function renderDailySummaries() {
+  const prompts = ["今天最值得记录的一件事", "今天学到或意识到什么", "明天最重要的一件事"];
+  $("#summaryList").innerHTML = prompts.map((prompt, index) => {
+    const slot = index + 1;
+    const summary = state.dailySummaries.find((item) => item.date === selectedDate && item.slot === slot);
+    const content = summary?.content || "";
+    return `<form class="summary-card" data-summary-form="${slot}"><label for="summary-${slot}">${prompt}</label><textarea id="summary-${slot}" data-summary-input="${slot}" maxlength="500" placeholder="写下这一句">${escapeHtml(content)}</textarea><div class="summary-footer"><span class="char-count" data-summary-count="${slot}">${content.length} / 500</span><button class="primary-button" type="submit">保存</button></div></form>`;
+  }).join("");
 }
 
 function renderChart(donutId, legendId, centerId, data) {
@@ -228,11 +310,12 @@ function renderChart(donutId, legendId, centerId, data) {
 }
 
 function renderStats() {
-  const daily = state.records.filter((record) => record.date === todayKey());
+  const daily = state.records.filter((record) => record.date === selectedDate);
   const dailyData = categoryData(daily);
   const allData = categoryData(state.records);
   const allTotal = allData.reduce((sum, item) => sum + item.value, 0);
-  $("#statsDateLabel").textContent = formatDate();
+  $("#statsDateLabel").textContent = formatDate(selectedDate);
+  $("#dailyStatsLabel").textContent = selectedDate === todayKey() ? "今天" : formatDate(selectedDate);
   $("#statsTotal").textContent = `${(allTotal / 60).toFixed(allTotal % 60 ? 1 : 0)} 小时`;
   renderChart("dailyDonut", "dailyLegend", "dailyTotal", dailyData);
   renderChart("totalDonut", "totalLegend", "allTotal", allData);
@@ -254,10 +337,61 @@ function imageData(file) { return new Promise((resolve) => { if (!file) return r
 function saveBooks() { saveLocal(); renderBooks(); syncBooksToCloud(); }
 
 function escapeHtml(value) { const div = document.createElement("div"); div.textContent = value; return div.innerHTML; }
+function updateRecordCount() { $("#recordTitleCount").textContent = `${$("#recordTitle").value.length} / 500`; }
+function openRecordEditor(id) {
+  const record = state.records.find((item) => item.id === id);
+  if (!record) return;
+  $("#recordEditForm").dataset.recordId = id;
+  $("#recordEditDate").textContent = formatDate(record.date);
+  $("#recordEditStart").value = record.start;
+  $("#recordEditEnd").value = record.end;
+  $("#recordEditCategory").value = record.category || "fun";
+  $("#recordEditTitle").value = record.title;
+  $("#recordEditCount").textContent = `${record.title.length} / 500`;
+  $("#recordDialog").showModal();
+}
+async function saveRecordEdit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const record = state.records.find((item) => item.id === form.dataset.recordId);
+  const title = $("#recordEditTitle").value.trim();
+  const start = $("#recordEditStart").value;
+  const end = $("#recordEditEnd").value;
+  if (!record || !title || title.length > 500 || !start || !end || minutes(end) <= minutes(start)) {
+    setSyncStatus("请填写内容，并确认结束时间晚于开始时间");
+    return;
+  }
+  record.title = title;
+  record.start = start;
+  record.end = end;
+  record.category = $("#recordEditCategory").value;
+  saveLocal();
+  $("#recordDialog").close();
+  renderRecords(); renderStats(); renderDateControls();
+  await syncRecordToCloud(record);
+}
+async function saveDailySummary(event) {
+  event.preventDefault();
+  const form = event.target;
+  const slot = Number(form.dataset.summaryForm);
+  const content = form.querySelector("textarea").value.trim();
+  if (content.length > 500) return;
+  const existing = state.dailySummaries.find((item) => item.date === selectedDate && item.slot === slot);
+  if (!content && !existing) return;
+  if (!content && existing) {
+    state.dailySummaries = state.dailySummaries.filter((item) => item !== existing);
+    saveLocal(); renderDailySummaries(); renderDateControls();
+    await deleteDailySummaryFromCloud(existing);
+    return;
+  }
+  const summary = existing || { id: uid(), date: selectedDate, slot, content: "" };
+  summary.content = content;
+  if (!existing) state.dailySummaries.push(summary);
+  saveLocal(); renderDailySummaries(); renderDateControls();
+  await syncDailySummaryToCloud(summary);
+}
 
-$("#todayLabel").textContent = formatDate();
-$("#timelineDateLabel").textContent = formatDate();
-$("#statsDateLabel").textContent = formatDate();
+$("#todayLabel").textContent = formatDate(todayKey());
 $("#emailConfirmButton").addEventListener("click", prepareOwnerLogin);
 $("#retrySyncButton").addEventListener("click", async () => {
   if (cloudUser) {
@@ -277,13 +411,31 @@ document.addEventListener("click", (event) => {
   if (deleteNote) { const book = state.books.find((item) => item.id === selectedBookId); if (book) { const field = deleteNote.dataset.noteType === "书摘" ? "excerpts" : "reflections"; const note = (book[field] || []).find((item) => item.id === deleteNote.dataset.noteDelete); book[field] = (book[field] || []).filter((item) => item.id !== deleteNote.dataset.noteDelete); saveBooks(); if (note) deleteNoteFromCloud(note); } }
 });
 document.addEventListener("submit", async (event) => {
+  if (event.target.matches("[data-summary-form]")) { await saveDailySummary(event); return; }
   if (event.target.id === "newBookForm") { event.preventDefault(); const title = $("#bookTitle").value.trim(); if (!title) return; const book = { id: uid(), title, author: $("#bookAuthor").value.trim(), rating: 0, excerpts: [], reflections: [] }; state.books.push(book); selectedBookId = book.id; saveBooks(); return; }
   if (!["excerptForm", "reflectionForm"].includes(event.target.id)) return;
   event.preventDefault(); const book = state.books.find((item) => item.id === selectedBookId); if (!book) return; const isExcerpt = event.target.id === "excerptForm"; const text = $(isExcerpt ? "#excerptText" : "#reflectionText").value.trim(); const image = await imageData($(isExcerpt ? "#excerptImage" : "#reflectionImage").files[0]); if (!text && !image) return; const field = isExcerpt ? "excerpts" : "reflections"; book[field] ||= []; book[field].unshift({ id: uid(), text, image }); saveBooks();
 });
 $("#taskForm").addEventListener("submit", (event) => { event.preventDefault(); const title = $("#taskTitle").value.trim(); if (!title) return; state.tasks.push({ id: uid(), title, time: $("#taskTime").value, date: todayKey(), done: false }); save(); event.target.reset(); renderTasks(); $("#taskTitle").focus(); });
-$("#recordForm").addEventListener("submit", (event) => { event.preventDefault(); const title = $("#recordTitle").value.trim(); const start = $("#recordStart").value; const end = $("#recordEnd").value; if (!title || !start || !end || minutes(end) <= minutes(start)) return; state.records.push({ id: uid(), title, start, end, category: $("#recordCategory").value, date: todayKey() }); save(); event.target.reset(); renderRecords(); renderStats(); $("#recordTitle").focus(); });
-document.addEventListener("click", (event) => { const view = event.target.closest("[data-view]"); if (view) { document.querySelectorAll(".tab").forEach((tab) => tab.classList.toggle("is-active", tab === view)); document.querySelectorAll(".view").forEach((section) => section.classList.toggle("is-visible", section.id === `${view.dataset.view}View`)); } const taskDelete = event.target.closest("[data-task-delete]"); if (taskDelete) { state.tasks = state.tasks.filter((task) => task.id !== taskDelete.dataset.taskDelete); save(); renderTasks(); } const recordDelete = event.target.closest("[data-record-delete]"); if (recordDelete) { state.records = state.records.filter((record) => record.id !== recordDelete.dataset.recordDelete); save(); renderRecords(); renderStats(); } });
+$("#recordForm").addEventListener("submit", async (event) => { event.preventDefault(); const title = $("#recordTitle").value.trim(); const start = $("#recordStart").value; const end = $("#recordEnd").value; if (!title || title.length > 500 || !start || !end || minutes(end) <= minutes(start)) { setSyncStatus("请填写内容，并确认结束时间晚于开始时间"); return; } const record = { id: uid(), title, start, end, category: $("#recordCategory").value, date: selectedDate }; state.records.push(record); saveLocal(); event.target.reset(); updateRecordCount(); renderRecords(); renderStats(); renderDateControls(); await syncRecordToCloud(record); $("#recordTitle").focus(); });
+$("#recordEditForm").addEventListener("submit", saveRecordEdit);
+$("#recordEditClose").addEventListener("click", () => $("#recordDialog").close());
+$("#recordTitle").addEventListener("input", updateRecordCount);
+$("#recordEditTitle").addEventListener("input", () => { $("#recordEditCount").textContent = `${$("#recordEditTitle").value.length} / 500`; });
+$("#selectedDateButton").addEventListener("click", () => { calendarMonth = new Date(dateFromKey(selectedDate).getFullYear(), dateFromKey(selectedDate).getMonth(), 1); renderCalendar(); $("#dateCalendar").showModal(); });
+$("#calendarCloseButton").addEventListener("click", () => $("#dateCalendar").close());
+$("#previousMonthButton").addEventListener("click", () => { calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1); renderCalendar(); });
+$("#nextMonthButton").addEventListener("click", () => { calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1); renderCalendar(); });
+$("#previousDateButton").addEventListener("click", () => { const date = dateFromKey(selectedDate); date.setDate(date.getDate() - 1); setSelectedDate(localDateKey(date)); });
+$("#nextDateButton").addEventListener("click", () => { const date = dateFromKey(selectedDate); date.setDate(date.getDate() + 1); setSelectedDate(localDateKey(date)); });
+$("#todayDateButton").addEventListener("click", () => setSelectedDate(todayKey()));
+$("#calendarGrid").addEventListener("click", (event) => { const day = event.target.closest("[data-calendar-date]"); if (!day) return; setSelectedDate(day.dataset.calendarDate); $("#dateCalendar").close(); });
+document.addEventListener("click", async (event) => { const view = event.target.closest("[data-view]"); if (view) { document.querySelectorAll(".tab").forEach((tab) => tab.classList.toggle("is-active", tab === view)); document.querySelectorAll(".view").forEach((section) => section.classList.toggle("is-visible", section.id === `${view.dataset.view}View`)); }
+  const taskDelete = event.target.closest("[data-task-delete]"); if (taskDelete) { state.tasks = state.tasks.filter((task) => task.id !== taskDelete.dataset.taskDelete); save(); renderTasks(); return; }
+  const recordDelete = event.target.closest("[data-record-delete]"); if (recordDelete) { const id = recordDelete.dataset.recordDelete; state.records = state.records.filter((record) => record.id !== id); saveLocal(); renderRecords(); renderStats(); renderDateControls(); await deleteRecordFromCloud(id); return; }
+  const recordEdit = event.target.closest("[data-record-edit]"); if (recordEdit) { openRecordEditor(recordEdit.dataset.recordEdit); return; }
+  const recordCard = event.target.closest("[data-record-card]"); if (recordCard && !event.target.closest("button")) openRecordEditor(recordCard.dataset.recordCard);
+});
 document.addEventListener("change", (event) => { const checkbox = event.target.closest("[data-task-check]"); if (!checkbox) return; const task = state.tasks.find((item) => item.id === checkbox.dataset.taskCheck); if (task) task.done = checkbox.checked; save(); renderTasks(); });
 
 let deferredPrompt;
@@ -291,7 +443,9 @@ window.addEventListener("beforeinstallprompt", (event) => { event.preventDefault
 $("#installButton").addEventListener("click", async () => { if (!deferredPrompt) return; deferredPrompt.prompt(); deferredPrompt = null; $("#installButton").hidden = true; });
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
 renderTasks();
+renderDateControls();
 renderRecords();
 renderStats();
+renderDailySummaries();
 renderBooks();
 initCloud();

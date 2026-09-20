@@ -7,7 +7,7 @@
     <meta name="description" content="只属于你的今日任务与24小时记录。" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=4" />
+    <link rel="stylesheet" href="styles.css?v=5" />
     <title>此刻 · 时间记录</title>
   </head>
   <body>
@@ -53,8 +53,13 @@
       <section class="view" id="timelineView" aria-labelledby="timelineHeading">
         <div class="section-heading">
           <div>
-            <p class="date-label" id="timelineDateLabel"></p>
-            <h2 id="timelineHeading">这段时间在做什么？</h2>
+            <div class="date-navigator" aria-label="选择记录日期">
+              <button class="date-icon-button" type="button" id="previousDateButton" aria-label="前一天" title="前一天">‹</button>
+              <button class="selected-date-button" type="button" id="selectedDateButton" aria-haspopup="dialog" aria-label="选择日期"><span id="timelineDateLabel"></span><span aria-hidden="true">▾</span></button>
+              <button class="date-today-button" type="button" id="todayDateButton">今天</button>
+              <button class="date-icon-button" type="button" id="nextDateButton" aria-label="后一天" title="后一天">›</button>
+            </div>
+            <h2 id="timelineHeading">这一天做了什么？</h2>
           </div>
           <span class="time-total" id="timeTotal">0 小时</span>
         </div>
@@ -64,7 +69,7 @@
             <span>至</span>
             <input id="recordEnd" type="time" aria-label="结束时间" required />
           </div>
-          <input id="recordTitle" type="text" maxlength="80" placeholder="记录这段时间做了什么" autocomplete="off" required />
+          <div class="record-title-field"><textarea id="recordTitle" maxlength="500" placeholder="记录这段时间做了什么" autocomplete="off" required></textarea><span class="char-count" id="recordTitleCount">0 / 500</span></div>
           <select id="recordCategory" aria-label="事件分类">
             <option value="money">钱</option>
             <option value="learning">学习</option>
@@ -75,6 +80,10 @@
         </form>
         <div class="timeline" id="recordList"></div>
         <div class="empty-state" id="recordEmpty">还没有时间记录。完成一段时间后，回来写下它。</div>
+        <section class="daily-summary" aria-labelledby="dailySummaryHeading">
+          <div class="daily-summary-heading"><div><p class="date-label">DAILY REVIEW</p><h3 id="dailySummaryHeading">这一天，留下三句话</h3></div></div>
+          <div class="summary-list" id="summaryList"></div>
+        </section>
       </section>
 
       <section class="view" id="statsView" aria-labelledby="statsHeading">
@@ -84,7 +93,7 @@
         </div>
         <div class="stats-grid">
           <article class="chart-panel">
-            <div class="chart-title"><span>每日时长</span><small>今天</small></div>
+            <div class="chart-title"><span>每日时长</span><small id="dailyStatsLabel">今天</small></div>
             <div class="donut-wrap"><div class="donut" id="dailyDonut"><div class="donut-center" id="dailyTotal">0h</div></div></div>
             <div class="legend" id="dailyLegend"></div>
           </article>
@@ -111,7 +120,22 @@
 
       <footer class="footer-note">所有内容只保存在这台设备上</footer>
     </main>
+    <dialog class="calendar-dialog" id="dateCalendar">
+      <div class="calendar-header"><button class="date-icon-button" type="button" id="previousMonthButton" aria-label="上个月">‹</button><strong id="calendarMonthLabel"></strong><button class="date-icon-button" type="button" id="nextMonthButton" aria-label="下个月">›</button></div>
+      <div class="calendar-weekdays" aria-hidden="true"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+      <div class="calendar-grid" id="calendarGrid"></div>
+      <button class="text-button" type="button" id="calendarCloseButton">关闭</button>
+    </dialog>
+    <dialog class="record-dialog" id="recordDialog">
+      <form class="record-edit-form" id="recordEditForm">
+        <div class="dialog-heading"><div><p class="date-label" id="recordEditDate"></p><h3>编辑记录</h3></div><button class="delete-button" type="button" id="recordEditClose" aria-label="关闭编辑" title="关闭">×</button></div>
+        <div class="time-fields"><input id="recordEditStart" type="time" aria-label="开始时间" required /><span>至</span><input id="recordEditEnd" type="time" aria-label="结束时间" required /></div>
+        <select id="recordEditCategory" aria-label="事件分类"><option value="money">钱</option><option value="learning">学习</option><option value="network">人脉</option><option value="fun">娱乐</option></select>
+        <textarea id="recordEditTitle" maxlength="500" placeholder="记录这段时间做了什么" required></textarea>
+        <div class="form-footer"><span class="char-count" id="recordEditCount">0 / 500</span><button class="primary-button" type="submit">保存修改</button></div>
+      </form>
+    </dialog>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=22"></script>
+    <script src="app.js?v=24"></script>
   </body>
 </html>
