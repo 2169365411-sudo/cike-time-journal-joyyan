@@ -7,7 +7,7 @@
     <meta name="description" content="只属于你的今日任务与24小时记录。" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=5" />
+    <link rel="stylesheet" href="styles.css?v=6" />
     <title>此刻 · 时间记录</title>
   </head>
   <body>
@@ -135,7 +135,14 @@
         <div class="form-footer"><span class="char-count" id="recordEditCount">0 / 500</span><button class="primary-button" type="submit">保存修改</button></div>
       </form>
     </dialog>
+    <dialog class="record-dialog" id="summaryDialog">
+      <form class="record-edit-form" id="summaryEditForm">
+        <div class="dialog-heading"><div><p class="date-label" id="summaryEditDate"></p><h3 id="summaryEditPrompt">编辑总结</h3></div><button class="delete-button" type="button" id="summaryEditClose" aria-label="关闭编辑" title="关闭">×</button></div>
+        <textarea id="summaryEditContent" maxlength="500" placeholder="写下这一句" required></textarea>
+        <div class="form-footer"><span class="char-count" id="summaryEditCount">0 / 500</span><button class="primary-button" type="submit">保存修改</button></div>
+      </form>
+    </dialog>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=24"></script>
+    <script src="app.js?v=25"></script>
   </body>
 </html>

@@ -31,6 +31,8 @@ const minutes = (time) => { const [h, m] = time.split(":").map(Number); return h
 const categories = { money: { label: "钱", color: "#f4d34f" }, learning: { label: "学习", color: "#72c579" }, network: { label: "人脉", color: "#ef5b56" }, fun: { label: "娱乐", color: "#ed82b4" } };
 const categoryData = (records) => Object.keys(categories).map((key) => ({ key, ...categories[key], value: records.filter((record) => (record.category || "fun") === key).reduce((sum, record) => sum + Math.max(0, minutes(record.end) - minutes(record.start)), 0) }));
 let selectedBookId = state.books[0]?.id || null;
+const summaryKey = (summary) => `${summary.date}:${summary.slot}`;
+const summaryPrompts = ["今天最值得记录的一件事", "今天学到或意识到什么", "明天最重要的一件事"];
 
 function setSyncStatus(text, online = false) { $("#syncStatus").textContent = text; $("#syncDot").classList.toggle("is-online", online); }
 const pendingMigration = () => { try { return JSON.parse(localStorage.getItem(MIGRATION_KEY) || "null"); } catch { return null; } };
@@ -84,9 +86,23 @@ async function loadFromCloud() {
   if (taskResult.error || recordResult.error) { setSyncStatus("同步失败"); return; }
   state.tasks = taskResult.data.map((task) => ({ id: task.id, title: task.title, time: task.planned_time || "", date: task.date, done: task.done }));
   state.records = recordResult.data.map((record) => ({ id: record.id, title: record.title, start: record.start_time, end: record.end_time, category: record.category, date: record.date }));
-  if (!summaryResult.error) state.dailySummaries = summaryResult.data.map((summary) => ({ id: summary.id, date: summary.date, slot: summary.slot, content: summary.content }));
+  const summariesToUpload = [];
+  if (!summaryResult.error) {
+    const cloudSummaries = new Map(summaryResult.data.map((summary) => [summaryKey(summary), { id: summary.id, date: summary.date, slot: Number(summary.slot), content: summary.content, savedAt: summary.updated_at, syncState: "synced", syncError: "" }]));
+    for (const localSummary of state.dailySummaries.filter((summary) => summary.content?.trim())) {
+      const key = summaryKey(localSummary);
+      if (!cloudSummaries.has(key)) {
+        const preserved = { ...localSummary, syncState: "syncing", syncError: "" };
+        cloudSummaries.set(key, preserved);
+        summariesToUpload.push(preserved);
+      }
+    }
+    state.dailySummaries = [...cloudSummaries.values()];
+  }
   saveLocal(); renderTasks(); renderRecords(); renderStats(); renderDailySummaries(); renderDateControls();
-  setSyncStatus(summaryResult.error ? "日程已同步；请更新总结数据表" : "已同步", !summaryResult.error);
+  if (summaryResult.error) { setSyncStatus("日程已同步；总结读取失败", false); return; }
+  for (const summary of summariesToUpload) await syncDailySummaryToCloud(summary);
+  setSyncStatus("已同步", true);
 }
 async function syncRecordToCloud(record) {
   if (!cloudUser || !cloud) return;
@@ -100,17 +116,64 @@ async function deleteRecordFromCloud(id) {
   const { error } = await cloud.from("time_records").delete().eq("id", id);
   setSyncStatus(error ? "删除同步失败" : "已同步", !error);
 }
+function summaryErrorMessage(error, action = "保存") {
+  const message = error?.message || "网络或权限异常";
+  if (/row-level security|permission denied/i.test(message)) return `${action}失败：没有写入权限`;
+  if (/relation .*daily_summaries|does not exist/i.test(message)) return `${action}失败：总结数据表尚未完成升级`;
+  if (/check constraint|char_length/i.test(message)) return `${action}失败：内容需要在 1 至 500 字之间`;
+  return `${action}失败：${message}`;
+}
+function summarySyncMeta(summary) {
+  if (summary.syncState === "syncing") return { text: "正在同步", tone: "" };
+  if (summary.syncState === "failed") return { text: summary.syncError || "保存失败，请重试", tone: "is-failed" };
+  if (!cloudUser || summary.syncState === "local") return { text: "仅本机保存，请登录后同步", tone: "is-local" };
+  return { text: "已同步", tone: "is-synced" };
+}
+function summaryTime(summary) {
+  if (!summary.savedAt) return "已保存";
+  const date = new Date(summary.savedAt);
+  return Number.isNaN(date.valueOf()) ? "已保存" : `已保存 · ${date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}`;
+}
 async function syncDailySummaryToCloud(summary) {
-  if (!cloudUser || !cloud) return;
+  if (!cloudUser || !cloud) {
+    summary.syncState = "local";
+    summary.syncError = "仅本机保存，请登录后同步";
+    saveLocal(); renderDailySummaries(); renderDateControls();
+    return { ok: false, local: true };
+  }
+  summary.syncState = "syncing";
+  summary.syncError = "";
+  saveLocal(); renderDailySummaries();
   setSyncStatus("正在同步", true);
-  const { error } = await cloud.from("daily_summaries").upsert({ id: summary.id, user_id: cloudUser.id, date: summary.date, slot: summary.slot, content: summary.content }, { onConflict: "user_id,date,slot" });
-  setSyncStatus(error ? "总结同步失败；请更新数据表" : "已同步", !error);
+  const { error } = await cloud.from("daily_summaries").upsert({ id: summary.id, user_id: cloudUser.id, date: summary.date, slot: summary.slot, content: summary.content, updated_at: new Date().toISOString() }, { onConflict: "user_id,date,slot" });
+  if (error) {
+    summary.syncState = "failed";
+    summary.syncError = summaryErrorMessage(error);
+    saveLocal(); renderDailySummaries();
+    setSyncStatus(summary.syncError, false);
+    return { ok: false };
+  }
+  summary.syncState = "synced";
+  summary.syncError = "";
+  summary.savedAt = new Date().toISOString();
+  saveLocal(); renderDailySummaries(); renderDateControls();
+  setSyncStatus("已同步", true);
+  return { ok: true };
 }
 async function deleteDailySummaryFromCloud(summary) {
-  if (!cloudUser || !cloud) return;
+  if (!cloudUser || !cloud) return { ok: true, local: true };
   setSyncStatus("正在删除", true);
   const { error } = await cloud.from("daily_summaries").delete().eq("id", summary.id);
-  setSyncStatus(error ? "总结同步失败；请更新数据表" : "已同步", !error);
+  if (error) {
+    summary.syncState = "failed";
+    summary.pendingAction = "delete";
+    summary.syncError = summaryErrorMessage(error, "删除");
+    saveLocal(); renderDailySummaries();
+    setSyncStatus(summary.syncError, false);
+    return { ok: false };
+  }
+  setSyncStatus("已同步", true);
+  return { ok: true };
 }
 async function signedImage(path) {
   if (!path || !cloud) return "";
@@ -291,12 +354,13 @@ function renderCalendar() {
   }).join("")}`;
 }
 function renderDailySummaries() {
-  const prompts = ["今天最值得记录的一件事", "今天学到或意识到什么", "明天最重要的一件事"];
-  $("#summaryList").innerHTML = prompts.map((prompt, index) => {
+  $("#summaryList").innerHTML = summaryPrompts.map((prompt, index) => {
     const slot = index + 1;
     const summary = state.dailySummaries.find((item) => item.date === selectedDate && item.slot === slot);
-    const content = summary?.content || "";
-    return `<form class="summary-card" data-summary-form="${slot}"><label for="summary-${slot}">${prompt}</label><textarea id="summary-${slot}" data-summary-input="${slot}" maxlength="500" placeholder="写下这一句">${escapeHtml(content)}</textarea><div class="summary-footer"><span class="char-count" data-summary-count="${slot}">${content.length} / 500</span><button class="primary-button" type="submit">保存</button></div></form>`;
+    if (!summary) return `<form class="summary-card" data-summary-form="${slot}"><label for="summary-${slot}">${prompt}</label><textarea id="summary-${slot}" data-summary-input="${slot}" maxlength="500" placeholder="写下这一句"></textarea><div class="summary-footer"><span class="char-count" data-summary-count="${slot}">0 / 500</span><button class="primary-button" type="submit">保存</button></div></form>`;
+    const sync = summarySyncMeta(summary);
+    const retryAction = summary.pendingAction === "delete" ? "删除重试" : "重试";
+    return `<article class="summary-card summary-card--saved ${summary.syncState === "failed" ? "summary-card--failed" : ""}"><div class="summary-card-header"><label>${prompt}</label><span class="summary-status ${sync.tone}">${sync.text}</span></div><p class="summary-copy">${escapeHtml(summary.content)}</p><div class="summary-card-footer"><span>${summaryTime(summary)}</span><div class="summary-actions">${summary.syncState === "failed" ? `<button class="text-button" type="button" data-summary-retry="${summary.id}">${retryAction}</button>` : ""}<button class="text-button" type="button" data-summary-edit="${summary.id}">编辑</button><button class="delete-button" type="button" data-summary-delete="${summary.id}" aria-label="删除总结" title="删除总结">×</button></div></div></article>`;
   }).join("");
 }
 
@@ -375,20 +439,47 @@ async function saveDailySummary(event) {
   const form = event.target;
   const slot = Number(form.dataset.summaryForm);
   const content = form.querySelector("textarea").value.trim();
-  if (content.length > 500) return;
-  const existing = state.dailySummaries.find((item) => item.date === selectedDate && item.slot === slot);
-  if (!content && !existing) return;
-  if (!content && existing) {
-    state.dailySummaries = state.dailySummaries.filter((item) => item !== existing);
-    saveLocal(); renderDailySummaries(); renderDateControls();
-    await deleteDailySummaryFromCloud(existing);
-    return;
-  }
-  const summary = existing || { id: uid(), date: selectedDate, slot, content: "" };
-  summary.content = content;
-  if (!existing) state.dailySummaries.push(summary);
+  if (!content || content.length > 500) { setSyncStatus("总结内容需要在 1 至 500 字之间"); return; }
+  const summary = { id: uid(), date: selectedDate, slot, content, savedAt: new Date().toISOString(), syncState: cloudUser ? "syncing" : "local", syncError: "" };
+  state.dailySummaries.push(summary);
   saveLocal(); renderDailySummaries(); renderDateControls();
   await syncDailySummaryToCloud(summary);
+}
+
+function openSummaryEditor(id) {
+  const summary = state.dailySummaries.find((item) => item.id === id);
+  if (!summary) return;
+  $("#summaryEditForm").dataset.summaryId = id;
+  $("#summaryEditDate").textContent = formatDate(summary.date);
+  $("#summaryEditPrompt").textContent = summaryPrompts[summary.slot - 1];
+  $("#summaryEditContent").value = summary.content;
+  $("#summaryEditCount").textContent = `${summary.content.length} / 500`;
+  $("#summaryDialog").showModal();
+}
+async function saveSummaryEdit(event) {
+  event.preventDefault();
+  const summary = state.dailySummaries.find((item) => item.id === event.currentTarget.dataset.summaryId);
+  const content = $("#summaryEditContent").value.trim();
+  if (!summary || !content || content.length > 500) { setSyncStatus("总结内容需要在 1 至 500 字之间"); return; }
+  summary.content = content;
+  summary.savedAt = new Date().toISOString();
+  summary.pendingAction = "";
+  summary.syncState = cloudUser ? "syncing" : "local";
+  summary.syncError = "";
+  saveLocal(); $("#summaryDialog").close(); renderDailySummaries(); renderDateControls();
+  await syncDailySummaryToCloud(summary);
+}
+async function removeDailySummary(id, confirmed = false) {
+  const summary = state.dailySummaries.find((item) => item.id === id);
+  if (!summary || (!confirmed && !window.confirm("确定删除这条总结吗？删除后无法恢复。"))) return;
+  summary.syncState = "syncing";
+  summary.pendingAction = "delete";
+  summary.syncError = "";
+  saveLocal(); renderDailySummaries();
+  const result = await deleteDailySummaryFromCloud(summary);
+  if (!result.ok) return;
+  state.dailySummaries = state.dailySummaries.filter((item) => item.id !== id);
+  saveLocal(); renderDailySummaries(); renderDateControls();
 }
 
 $("#todayLabel").textContent = formatDate(todayKey());
@@ -420,8 +511,11 @@ $("#taskForm").addEventListener("submit", (event) => { event.preventDefault(); c
 $("#recordForm").addEventListener("submit", async (event) => { event.preventDefault(); const title = $("#recordTitle").value.trim(); const start = $("#recordStart").value; const end = $("#recordEnd").value; if (!title || title.length > 500 || !start || !end || minutes(end) <= minutes(start)) { setSyncStatus("请填写内容，并确认结束时间晚于开始时间"); return; } const record = { id: uid(), title, start, end, category: $("#recordCategory").value, date: selectedDate }; state.records.push(record); saveLocal(); event.target.reset(); updateRecordCount(); renderRecords(); renderStats(); renderDateControls(); await syncRecordToCloud(record); $("#recordTitle").focus(); });
 $("#recordEditForm").addEventListener("submit", saveRecordEdit);
 $("#recordEditClose").addEventListener("click", () => $("#recordDialog").close());
+$("#summaryEditForm").addEventListener("submit", saveSummaryEdit);
+$("#summaryEditClose").addEventListener("click", () => $("#summaryDialog").close());
 $("#recordTitle").addEventListener("input", updateRecordCount);
 $("#recordEditTitle").addEventListener("input", () => { $("#recordEditCount").textContent = `${$("#recordEditTitle").value.length} / 500`; });
+$("#summaryEditContent").addEventListener("input", () => { $("#summaryEditCount").textContent = `${$("#summaryEditContent").value.length} / 500`; });
 $("#selectedDateButton").addEventListener("click", () => { calendarMonth = new Date(dateFromKey(selectedDate).getFullYear(), dateFromKey(selectedDate).getMonth(), 1); renderCalendar(); $("#dateCalendar").showModal(); });
 $("#calendarCloseButton").addEventListener("click", () => $("#dateCalendar").close());
 $("#previousMonthButton").addEventListener("click", () => { calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1); renderCalendar(); });
@@ -431,12 +525,16 @@ $("#nextDateButton").addEventListener("click", () => { const date = dateFromKey(
 $("#todayDateButton").addEventListener("click", () => setSelectedDate(todayKey()));
 $("#calendarGrid").addEventListener("click", (event) => { const day = event.target.closest("[data-calendar-date]"); if (!day) return; setSelectedDate(day.dataset.calendarDate); $("#dateCalendar").close(); });
 document.addEventListener("click", async (event) => { const view = event.target.closest("[data-view]"); if (view) { document.querySelectorAll(".tab").forEach((tab) => tab.classList.toggle("is-active", tab === view)); document.querySelectorAll(".view").forEach((section) => section.classList.toggle("is-visible", section.id === `${view.dataset.view}View`)); }
+  const summaryEdit = event.target.closest("[data-summary-edit]"); if (summaryEdit) { openSummaryEditor(summaryEdit.dataset.summaryEdit); return; }
+  const summaryDelete = event.target.closest("[data-summary-delete]"); if (summaryDelete) { await removeDailySummary(summaryDelete.dataset.summaryDelete); return; }
+  const summaryRetry = event.target.closest("[data-summary-retry]"); if (summaryRetry) { const summary = state.dailySummaries.find((item) => item.id === summaryRetry.dataset.summaryRetry); if (summary) { if (summary.pendingAction === "delete") await removeDailySummary(summary.id, true); else await syncDailySummaryToCloud(summary); } return; }
   const taskDelete = event.target.closest("[data-task-delete]"); if (taskDelete) { state.tasks = state.tasks.filter((task) => task.id !== taskDelete.dataset.taskDelete); save(); renderTasks(); return; }
   const recordDelete = event.target.closest("[data-record-delete]"); if (recordDelete) { const id = recordDelete.dataset.recordDelete; state.records = state.records.filter((record) => record.id !== id); saveLocal(); renderRecords(); renderStats(); renderDateControls(); await deleteRecordFromCloud(id); return; }
   const recordEdit = event.target.closest("[data-record-edit]"); if (recordEdit) { openRecordEditor(recordEdit.dataset.recordEdit); return; }
   const recordCard = event.target.closest("[data-record-card]"); if (recordCard && !event.target.closest("button")) openRecordEditor(recordCard.dataset.recordCard);
 });
 document.addEventListener("change", (event) => { const checkbox = event.target.closest("[data-task-check]"); if (!checkbox) return; const task = state.tasks.find((item) => item.id === checkbox.dataset.taskCheck); if (task) task.done = checkbox.checked; save(); renderTasks(); });
+document.addEventListener("input", (event) => { const input = event.target.closest("[data-summary-input]"); if (!input) return; const count = document.querySelector(`[data-summary-count="${input.dataset.summaryInput}"]`); if (count) count.textContent = `${input.value.length} / 500`; });
 
 let deferredPrompt;
 window.addEventListener("beforeinstallprompt", (event) => { event.preventDefault(); deferredPrompt = event; $("#installButton").hidden = false; });

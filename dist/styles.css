@@ -71,6 +71,19 @@ select { min-width:100px; border:1px solid var(--line); border-radius:8px; backg
 .summary-card textarea,.record-edit-form textarea { width:100%; min-height:74px; resize:vertical; }
 .summary-footer,.form-footer { display:flex; align-items:center; justify-content:space-between; gap:10px; }
 .summary-footer .primary-button,.form-footer .primary-button { height:36px; }
+.summary-card--saved { gap:12px; }
+.summary-card-header,.summary-card-footer,.summary-actions { display:flex; align-items:center; }
+.summary-card-header,.summary-card-footer { justify-content:space-between; gap:12px; }
+.summary-card-footer { color:var(--muted); font-size:12px; }
+.summary-card-footer p { margin:0; }
+.summary-actions { gap:4px; }
+.summary-copy { margin:0; white-space:pre-wrap; line-height:1.65; }
+.summary-status { color:var(--muted); font-size:12px; }
+.summary-status.is-synced { color:var(--accent-dark); }
+.summary-status.is-failed { color:#bf5a41; }
+.summary-status.is-local { color:#9a7b35; }
+.summary-card--failed { border-color:#e7b2a3; }
+.summary-card .text-button { padding:4px 7px; }
 .calendar-dialog,.record-dialog { width:min(92vw, 390px); border:1px solid var(--line); border-radius:8px; padding:18px; background:var(--card); color:var(--ink); box-shadow:0 20px 60px rgba(36,37,34,.2); }
 .calendar-dialog::backdrop,.record-dialog::backdrop { background:rgba(36,37,34,.18); }
 .calendar-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
