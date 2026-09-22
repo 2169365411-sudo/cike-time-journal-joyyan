@@ -28,13 +28,25 @@ let selectedDate = todayKey();
 let calendarMonth = new Date(dateFromKey(selectedDate).getFullYear(), dateFromKey(selectedDate).getMonth(), 1);
 const formatDate = (value = selectedDate) => new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric", weekday: "long" }).format(dateFromKey(value));
 const minutes = (time) => { const [h, m] = time.split(":").map(Number); return h * 60 + m; };
-const categories = { money: { label: "钱", color: "#f4d34f" }, learning: { label: "学习", color: "#72c579" }, network: { label: "人脉", color: "#ef5b56" }, fun: { label: "娱乐", color: "#ed82b4" } };
+const categories = {
+  money: { label: "钱", color: "#f4d34f" },
+  learning: { label: "学习", color: "#72c579" },
+  network: { label: "人脉", color: "#ef5b56" },
+  fun: { label: "娱乐", color: "#ed82b4" },
+  // PANTONE 17-3938 (Very Peri) screen-color mapping.
+  rest: { label: "休息", color: "#6667AB" }
+};
 const categoryData = (records) => Object.keys(categories).map((key) => ({ key, ...categories[key], value: records.filter((record) => (record.category || "fun") === key).reduce((sum, record) => sum + Math.max(0, minutes(record.end) - minutes(record.start)), 0) }));
 let selectedBookId = state.books[0]?.id || null;
 const summaryKey = (summary) => `${summary.date}:${summary.slot}`;
 const summaryPrompts = ["今天最值得记录的一件事", "今天学到或意识到什么", "明天最重要的一件事"];
 
 function setSyncStatus(text, online = false) { $("#syncStatus").textContent = text; $("#syncDot").classList.toggle("is-online", online); }
+function updateCategorySwatch(selectId, swatchId) {
+  const category = categories[$(selectId).value] || categories.fun;
+  $(swatchId).style.setProperty("--category-color", category.color);
+  $(swatchId).title = `${category.label}：${category.color}`;
+}
 const pendingMigration = () => { try { return JSON.parse(localStorage.getItem(MIGRATION_KEY) || "null"); } catch { return null; } };
 const isOwner = () => cloudUser?.email?.toLowerCase() === OWNER_EMAIL;
 function emailRedirectUrl(migration) {
@@ -410,6 +422,7 @@ function openRecordEditor(id) {
   $("#recordEditStart").value = record.start;
   $("#recordEditEnd").value = record.end;
   $("#recordEditCategory").value = record.category || "fun";
+  updateCategorySwatch("#recordEditCategory", "#recordEditCategorySwatch");
   $("#recordEditTitle").value = record.title;
   $("#recordEditCount").textContent = `${record.title.length} / 500`;
   $("#recordDialog").showModal();
@@ -511,6 +524,8 @@ $("#taskForm").addEventListener("submit", (event) => { event.preventDefault(); c
 $("#recordForm").addEventListener("submit", async (event) => { event.preventDefault(); const title = $("#recordTitle").value.trim(); const start = $("#recordStart").value; const end = $("#recordEnd").value; if (!title || title.length > 500 || !start || !end || minutes(end) <= minutes(start)) { setSyncStatus("请填写内容，并确认结束时间晚于开始时间"); return; } const record = { id: uid(), title, start, end, category: $("#recordCategory").value, date: selectedDate }; state.records.push(record); saveLocal(); event.target.reset(); updateRecordCount(); renderRecords(); renderStats(); renderDateControls(); await syncRecordToCloud(record); $("#recordTitle").focus(); });
 $("#recordEditForm").addEventListener("submit", saveRecordEdit);
 $("#recordEditClose").addEventListener("click", () => $("#recordDialog").close());
+$("#recordCategory").addEventListener("change", () => updateCategorySwatch("#recordCategory", "#recordCategorySwatch"));
+$("#recordEditCategory").addEventListener("change", () => updateCategorySwatch("#recordEditCategory", "#recordEditCategorySwatch"));
 $("#summaryEditForm").addEventListener("submit", saveSummaryEdit);
 $("#summaryEditClose").addEventListener("click", () => $("#summaryDialog").close());
 $("#recordTitle").addEventListener("input", updateRecordCount);
@@ -546,4 +561,6 @@ renderRecords();
 renderStats();
 renderDailySummaries();
 renderBooks();
+updateCategorySwatch("#recordCategory", "#recordCategorySwatch");
+updateCategorySwatch("#recordEditCategory", "#recordEditCategorySwatch");
 initCloud();

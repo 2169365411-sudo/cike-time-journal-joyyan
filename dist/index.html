@@ -7,7 +7,7 @@
     <meta name="description" content="只属于你的今日任务与24小时记录。" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=6" />
+    <link rel="stylesheet" href="styles.css?v=7" />
     <title>此刻 · 时间记录</title>
   </head>
   <body>
@@ -70,12 +70,13 @@
             <input id="recordEnd" type="time" aria-label="结束时间" required />
           </div>
           <div class="record-title-field"><textarea id="recordTitle" maxlength="500" placeholder="记录这段时间做了什么" autocomplete="off" required></textarea><span class="char-count" id="recordTitleCount">0 / 500</span></div>
-          <select id="recordCategory" aria-label="事件分类">
+          <div class="category-picker"><span class="category-swatch" id="recordCategorySwatch" aria-hidden="true"></span><select id="recordCategory" aria-label="事件分类">
             <option value="money">钱</option>
             <option value="learning">学习</option>
             <option value="network">人脉</option>
             <option value="fun">娱乐</option>
-          </select>
+            <option value="rest">休息</option>
+          </select></div>
           <button class="primary-button" type="submit" aria-label="记录时间" title="记录时间">记录</button>
         </form>
         <div class="timeline" id="recordList"></div>
@@ -130,7 +131,7 @@
       <form class="record-edit-form" id="recordEditForm">
         <div class="dialog-heading"><div><p class="date-label" id="recordEditDate"></p><h3>编辑记录</h3></div><button class="delete-button" type="button" id="recordEditClose" aria-label="关闭编辑" title="关闭">×</button></div>
         <div class="time-fields"><input id="recordEditStart" type="time" aria-label="开始时间" required /><span>至</span><input id="recordEditEnd" type="time" aria-label="结束时间" required /></div>
-        <select id="recordEditCategory" aria-label="事件分类"><option value="money">钱</option><option value="learning">学习</option><option value="network">人脉</option><option value="fun">娱乐</option></select>
+        <div class="category-picker category-picker--wide"><span class="category-swatch" id="recordEditCategorySwatch" aria-hidden="true"></span><select id="recordEditCategory" aria-label="事件分类"><option value="money">钱</option><option value="learning">学习</option><option value="network">人脉</option><option value="fun">娱乐</option><option value="rest">休息</option></select></div>
         <textarea id="recordEditTitle" maxlength="500" placeholder="记录这段时间做了什么" required></textarea>
         <div class="form-footer"><span class="char-count" id="recordEditCount">0 / 500</span><button class="primary-button" type="submit">保存修改</button></div>
       </form>
@@ -143,6 +144,6 @@
       </form>
     </dialog>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=25"></script>
+    <script src="app.js?v=26"></script>
   </body>
 </html>

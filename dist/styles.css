@@ -34,7 +34,11 @@ h2 { font:600 23px/1.25 Georgia, "Songti SC", serif; }
 .entry-form { display:flex; gap:8px; margin-bottom:22px; }
 input,textarea { min-width:0; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--ink); padding:12px 13px; outline:none; }
 input:focus,textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(66,185,150,.16); }
-select { min-width:100px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--ink); padding:12px 10px; outline:none; }
+.category-picker { display:flex; align-items:center; gap:8px; min-width:100px; border:1px solid var(--line); border-radius:8px; background:var(--card); padding:0 9px; }
+.category-picker:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px rgba(66,185,150,.16); }
+.category-picker select { min-width:0; width:100%; border:0; border-radius:0; background:transparent; color:var(--ink); padding:12px 0; outline:none; }
+.category-picker--wide { width:100%; }
+.category-swatch { width:11px; height:11px; flex:0 0 11px; border-radius:50%; background:var(--category-color, var(--accent)); }
 .entry-form > input:first-child { flex:1; }
 .entry-form input[type=time] { width:120px; }
 .primary-button { border:0; border-radius:8px; min-width:58px; padding:0 15px; background:var(--accent); color:white; font-weight:700; }
