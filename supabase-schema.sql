@@ -15,7 +15,7 @@ create table if not exists public.time_records (
   title text not null,
   start_time text not null,
   end_time text not null,
-  category text not null check (category in ('money', 'learning', 'network', 'fun')),
+  category text not null check (category in ('money', 'learning', 'network', 'fun', 'rest')),
   date date not null,
   updated_at timestamptz not null default now()
 );

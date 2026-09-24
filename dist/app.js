@@ -2,6 +2,8 @@ const STORAGE_KEY = "time-block-pwa-v1";
 const state = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{"tasks":[],"records":[]}');
 state.books ||= [];
 state.dailySummaries ||= [];
+state.pendingRecordUpserts ||= [];
+state.pendingRecordDeletes ||= [];
 const $ = (selector) => document.querySelector(selector);
 const localDateKey = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 const todayKey = () => localDateKey();
@@ -37,6 +39,20 @@ const categories = {
   rest: { label: "休息", color: "#6667AB" }
 };
 const categoryData = (records) => Object.keys(categories).map((key) => ({ key, ...categories[key], value: records.filter((record) => (record.category || "fun") === key).reduce((sum, record) => sum + Math.max(0, minutes(record.end) - minutes(record.start)), 0) }));
+function queueRecordUpsert(id) {
+  state.pendingRecordDeletes = state.pendingRecordDeletes.filter((pendingId) => pendingId !== id);
+  if (!state.pendingRecordUpserts.includes(id)) state.pendingRecordUpserts.push(id);
+}
+function queueRecordDelete(id) {
+  state.pendingRecordUpserts = state.pendingRecordUpserts.filter((pendingId) => pendingId !== id);
+  if (!state.pendingRecordDeletes.includes(id)) state.pendingRecordDeletes.push(id);
+}
+function recordErrorMessage(error, action = "保存") {
+  const message = error?.message || "网络或权限异常";
+  if (error?.code === "23514" || /check constraint/i.test(message)) return `${action}失败：云端尚未启用“休息”分类，请运行分类升级`;
+  if (/row-level security|permission denied/i.test(message)) return `${action}失败：没有写入权限`;
+  return `${action}失败：${message}`;
+}
 let selectedBookId = state.books[0]?.id || null;
 const summaryKey = (summary) => `${summary.date}:${summary.slot}`;
 const summaryPrompts = ["今天最值得记录的一件事", "今天学到或意识到什么", "明天最重要的一件事"];
@@ -85,6 +101,9 @@ async function syncToCloud() {
     tasks.length ? cloud.from("time_tasks").upsert(tasks) : Promise.resolve({ error: null }),
     records.length ? cloud.from("time_records").upsert(records) : Promise.resolve({ error: null })
   ]);
+  if (!recordResult.error) state.pendingRecordUpserts = [];
+  for (const id of [...state.pendingRecordDeletes]) await deleteRecordFromCloud(id);
+  saveLocal();
   setSyncStatus(taskResult.error || recordResult.error ? "同步失败" : "已同步", !(taskResult.error || recordResult.error));
 }
 async function loadFromCloud() {
@@ -97,7 +116,11 @@ async function loadFromCloud() {
   ]);
   if (taskResult.error || recordResult.error) { setSyncStatus("同步失败"); return; }
   state.tasks = taskResult.data.map((task) => ({ id: task.id, title: task.title, time: task.planned_time || "", date: task.date, done: task.done }));
-  state.records = recordResult.data.map((record) => ({ id: record.id, title: record.title, start: record.start_time, end: record.end_time, category: record.category, date: record.date }));
+  const pendingUpserts = new Map(state.records.filter((record) => state.pendingRecordUpserts.includes(record.id)).map((record) => [record.id, record]));
+  const cloudRecords = new Map(recordResult.data.map((record) => [record.id, { id: record.id, title: record.title, start: record.start_time, end: record.end_time, category: record.category, date: record.date }]));
+  for (const [id, record] of pendingUpserts) cloudRecords.set(id, record);
+  for (const id of state.pendingRecordDeletes) cloudRecords.delete(id);
+  state.records = [...cloudRecords.values()];
   const summariesToUpload = [];
   if (!summaryResult.error) {
     const cloudSummaries = new Map(summaryResult.data.map((summary) => [summaryKey(summary), { id: summary.id, date: summary.date, slot: Number(summary.slot), content: summary.content, savedAt: summary.updated_at, syncState: "synced", syncError: "" }]));
@@ -112,21 +135,40 @@ async function loadFromCloud() {
     state.dailySummaries = [...cloudSummaries.values()];
   }
   saveLocal(); renderTasks(); renderRecords(); renderStats(); renderDailySummaries(); renderDateControls();
+  for (const id of [...state.pendingRecordUpserts]) {
+    const record = state.records.find((item) => item.id === id);
+    if (record) await syncRecordToCloud(record);
+  }
+  for (const id of [...state.pendingRecordDeletes]) await deleteRecordFromCloud(id);
   if (summaryResult.error) { setSyncStatus("日程已同步；总结读取失败", false); return; }
   for (const summary of summariesToUpload) await syncDailySummaryToCloud(summary);
   setSyncStatus("已同步", true);
 }
 async function syncRecordToCloud(record) {
-  if (!cloudUser || !cloud) return;
+  if (!cloudUser || !cloud) return { ok: false, local: true };
   setSyncStatus("正在同步", true);
   const { error } = await cloud.from("time_records").upsert({ id: record.id, user_id: cloudUser.id, title: record.title, start_time: record.start, end_time: record.end, category: record.category || "fun", date: record.date });
-  setSyncStatus(error ? "记录同步失败" : "已同步", !error);
+  if (error) {
+    setSyncStatus(recordErrorMessage(error), false);
+    return { ok: false };
+  }
+  state.pendingRecordUpserts = state.pendingRecordUpserts.filter((id) => id !== record.id);
+  saveLocal();
+  setSyncStatus("已同步", true);
+  return { ok: true };
 }
 async function deleteRecordFromCloud(id) {
-  if (!cloudUser || !cloud) return;
+  if (!cloudUser || !cloud) return { ok: false, local: true };
   setSyncStatus("正在删除", true);
   const { error } = await cloud.from("time_records").delete().eq("id", id);
-  setSyncStatus(error ? "删除同步失败" : "已同步", !error);
+  if (error) {
+    setSyncStatus(recordErrorMessage(error, "删除"), false);
+    return { ok: false };
+  }
+  state.pendingRecordDeletes = state.pendingRecordDeletes.filter((pendingId) => pendingId !== id);
+  saveLocal();
+  setSyncStatus("已同步", true);
+  return { ok: true };
 }
 function summaryErrorMessage(error, action = "保存") {
   const message = error?.message || "网络或权限异常";
@@ -442,6 +484,7 @@ async function saveRecordEdit(event) {
   record.start = start;
   record.end = end;
   record.category = $("#recordEditCategory").value;
+  queueRecordUpsert(record.id);
   saveLocal();
   $("#recordDialog").close();
   renderRecords(); renderStats(); renderDateControls();
@@ -521,7 +564,7 @@ document.addEventListener("submit", async (event) => {
   event.preventDefault(); const book = state.books.find((item) => item.id === selectedBookId); if (!book) return; const isExcerpt = event.target.id === "excerptForm"; const text = $(isExcerpt ? "#excerptText" : "#reflectionText").value.trim(); const image = await imageData($(isExcerpt ? "#excerptImage" : "#reflectionImage").files[0]); if (!text && !image) return; const field = isExcerpt ? "excerpts" : "reflections"; book[field] ||= []; book[field].unshift({ id: uid(), text, image }); saveBooks();
 });
 $("#taskForm").addEventListener("submit", (event) => { event.preventDefault(); const title = $("#taskTitle").value.trim(); if (!title) return; state.tasks.push({ id: uid(), title, time: $("#taskTime").value, date: todayKey(), done: false }); save(); event.target.reset(); renderTasks(); $("#taskTitle").focus(); });
-$("#recordForm").addEventListener("submit", async (event) => { event.preventDefault(); const title = $("#recordTitle").value.trim(); const start = $("#recordStart").value; const end = $("#recordEnd").value; if (!title || title.length > 500 || !start || !end || minutes(end) <= minutes(start)) { setSyncStatus("请填写内容，并确认结束时间晚于开始时间"); return; } const record = { id: uid(), title, start, end, category: $("#recordCategory").value, date: selectedDate }; state.records.push(record); saveLocal(); event.target.reset(); updateRecordCount(); renderRecords(); renderStats(); renderDateControls(); await syncRecordToCloud(record); $("#recordTitle").focus(); });
+$("#recordForm").addEventListener("submit", async (event) => { event.preventDefault(); const title = $("#recordTitle").value.trim(); const start = $("#recordStart").value; const end = $("#recordEnd").value; if (!title || title.length > 500 || !start || !end || minutes(end) <= minutes(start)) { setSyncStatus("请填写内容，并确认结束时间晚于开始时间"); return; } const record = { id: uid(), title, start, end, category: $("#recordCategory").value, date: selectedDate }; state.records.push(record); queueRecordUpsert(record.id); saveLocal(); event.target.reset(); updateRecordCount(); renderRecords(); renderStats(); renderDateControls(); await syncRecordToCloud(record); $("#recordTitle").focus(); });
 $("#recordEditForm").addEventListener("submit", saveRecordEdit);
 $("#recordEditClose").addEventListener("click", () => $("#recordDialog").close());
 $("#recordCategory").addEventListener("change", () => updateCategorySwatch("#recordCategory", "#recordCategorySwatch"));
@@ -544,7 +587,7 @@ document.addEventListener("click", async (event) => { const view = event.target.
   const summaryDelete = event.target.closest("[data-summary-delete]"); if (summaryDelete) { await removeDailySummary(summaryDelete.dataset.summaryDelete); return; }
   const summaryRetry = event.target.closest("[data-summary-retry]"); if (summaryRetry) { const summary = state.dailySummaries.find((item) => item.id === summaryRetry.dataset.summaryRetry); if (summary) { if (summary.pendingAction === "delete") await removeDailySummary(summary.id, true); else await syncDailySummaryToCloud(summary); } return; }
   const taskDelete = event.target.closest("[data-task-delete]"); if (taskDelete) { state.tasks = state.tasks.filter((task) => task.id !== taskDelete.dataset.taskDelete); save(); renderTasks(); return; }
-  const recordDelete = event.target.closest("[data-record-delete]"); if (recordDelete) { const id = recordDelete.dataset.recordDelete; state.records = state.records.filter((record) => record.id !== id); saveLocal(); renderRecords(); renderStats(); renderDateControls(); await deleteRecordFromCloud(id); return; }
+  const recordDelete = event.target.closest("[data-record-delete]"); if (recordDelete) { const id = recordDelete.dataset.recordDelete; state.records = state.records.filter((record) => record.id !== id); queueRecordDelete(id); saveLocal(); renderRecords(); renderStats(); renderDateControls(); await deleteRecordFromCloud(id); return; }
   const recordEdit = event.target.closest("[data-record-edit]"); if (recordEdit) { openRecordEditor(recordEdit.dataset.recordEdit); return; }
   const recordCard = event.target.closest("[data-record-card]"); if (recordCard && !event.target.closest("button")) openRecordEditor(recordCard.dataset.recordCard);
 });
