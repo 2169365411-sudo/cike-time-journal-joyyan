@@ -57,6 +57,23 @@ do $$ begin
   end if;
 end $$;
 
+-- Long-form reflections: no application-level character limit.
+create table if not exists public.thought_entries (
+  id text primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  content text not null check (char_length(trim(content)) > 0),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.thought_entries enable row level security;
+
+do $$ begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'thought_entries' and policyname = 'users manage own thought entries') then
+    create policy "users manage own thought entries" on public.thought_entries for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+  end if;
+end $$;
+
 -- Reading notes: run this expansion after the original tables above.
 create table if not exists public.reading_books (
   id text primary key,
@@ -141,6 +158,7 @@ begin
   update public.time_tasks set user_id = target_user_id where user_id = p_source_user_id;
   update public.time_records set user_id = target_user_id where user_id = p_source_user_id;
   update public.daily_summaries set user_id = target_user_id where user_id = p_source_user_id;
+  update public.thought_entries set user_id = target_user_id where user_id = p_source_user_id;
   update public.reading_books set user_id = target_user_id where user_id = p_source_user_id;
   update public.reading_notes set user_id = target_user_id where user_id = p_source_user_id;
   delete from public.account_migrations where source_user_id = p_source_user_id;

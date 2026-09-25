@@ -4,7 +4,8 @@ body { margin:0; min-width:320px; background:var(--paper); color:var(--ink); }
 button,input,textarea { font:inherit; }
 button { cursor:pointer; }
 .app-shell { width:min(100%, 760px); min-height:100vh; margin:0 auto; padding:34px 22px 28px; }
-.topbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:30px; }
+.topbar { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:16px; margin-bottom:30px; }
+.icon-button { justify-self:end; }
 .sync-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:-12px 0 24px; color:var(--muted); font-size:12px; }
 .sync-bar > div { display:flex; align-items:center; gap:7px; }
 .sync-dot { width:8px; height:8px; border-radius:50%; background:#aaa; }
@@ -16,7 +17,11 @@ h1,h2,p { margin:0; }
 h1 { font:600 34px/1.05 Georgia, "Songti SC", serif; letter-spacing:0; }
 h2 { font:600 23px/1.25 Georgia, "Songti SC", serif; }
 .icon-button { width:40px; height:40px; border:1px solid var(--line); border-radius:50%; color:var(--accent); background:transparent; font-size:24px; line-height:1; }
+.thought-entry { border:0; padding:6px 0; background:transparent; color:var(--accent); font:600 15px/1.35 Georgia, "Songti SC", serif; letter-spacing:0; text-align:center; }
+.thought-entry:hover,.thought-entry.is-active { color:var(--accent-dark); }
+.thought-entry-short { display:none; }
 .tabs { display:flex; gap:24px; border-bottom:1px solid var(--line); margin-bottom:28px; }
+.app-shell.is-thoughts-open .tabs { display:none; }
 .tab { border:0; border-bottom:2px solid transparent; padding:0 0 12px; color:var(--muted); background:none; font-weight:600; }
 .tab.is-active { color:var(--ink); border-bottom-color:var(--accent); }
 .view { display:none; }
@@ -152,5 +157,26 @@ input:focus,textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px rg
 .note-copy p { white-space:pre-wrap; font-size:14px; line-height:1.6; }
 .note-copy img { display:block; width:min(100%, 360px); max-height:300px; margin-top:8px; border-radius:6px; object-fit:cover; }
 .note-empty,.book-empty { color:var(--muted); font-size:13px; }
+.thoughts-heading { margin-bottom:20px; }
+.thoughts-heading .date-label { margin:16px 0 7px; }
+.thought-back-button { color:var(--accent-dark); padding:0; }
+.thought-compose { display:grid; gap:10px; padding:16px; border:1px solid var(--line); border-radius:8px; background:rgba(255,254,250,.72); }
+.thought-compose textarea,.thought-dialog textarea { width:100%; min-height:180px; resize:vertical; line-height:1.7; }
+.thought-save-status { color:var(--muted); font-size:12px; }
+.thought-archive { margin-top:32px; padding-top:22px; border-top:1px solid var(--line); }
+.thought-archive h3 { margin:0 0 13px; font:600 20px/1.2 Georgia, "Songti SC", serif; }
+.thought-list { display:grid; gap:10px; }
+.thought-card { width:100%; border:1px solid var(--line); border-radius:8px; padding:15px; background:var(--card); text-align:left; }
+.thought-card:hover { border-color:var(--accent); }
+.thought-card-header,.thought-card-footer,.thought-card-actions { display:flex; align-items:center; }
+.thought-card-header,.thought-card-footer { justify-content:space-between; gap:12px; }
+.thought-card-date,.thought-card-footer { color:var(--muted); font-size:12px; }
+.thought-card-copy { margin:12px 0; color:var(--ink); line-height:1.65; white-space:pre-wrap; overflow-wrap:anywhere; }
+.thought-card-actions { gap:3px; }
+.thought-card .text-button { padding:4px 7px; }
+.thought-dialog-copy { margin:18px 0; white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.75; }
+.thought-dialog-meta { color:var(--muted); font-size:12px; }
+.thought-dialog-footer { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.thought-dialog-footer > div { display:flex; align-items:center; gap:4px; }
 .footer-note { margin-top:46px; color:#aaa9a2; font-size:12px; text-align:center; }
-@media (max-width:560px) { .app-shell { padding:26px 16px 22px; } h2 { font-size:21px; } .sync-bar { align-items:center; margin-top:-8px; } .entry-form { flex-wrap:wrap; } .entry-form > input:first-child,.timeline-form .record-title-field { flex-basis:calc(100% - 66px); } .entry-form input[type=time] { flex:1; width:auto; } .timeline-form .time-fields { order:2; flex:1; } .timeline-form .record-title-field { order:1; } .timeline-form select { order:2; flex:1; } .timeline-form .primary-button { order:3; } .record-time { width:92px; flex-basis:92px; } .stats-grid,.book-layout { grid-template-columns:1fr; } .donut { width:150px; height:150px; } .book-list { grid-template-columns:repeat(2,minmax(0,1fr)); } .book-detail { padding:15px; } .book-head { flex-direction:column; } }
+@media (max-width:560px) { .app-shell { padding:26px 16px 22px; } .topbar { grid-template-columns:1fr auto auto; gap:10px; } .thought-entry { font-size:14px; } .thought-entry-long { display:none; } .thought-entry-short { display:inline; } h2 { font-size:21px; } .sync-bar { align-items:center; margin-top:-8px; } .entry-form { flex-wrap:wrap; } .entry-form > input:first-child,.timeline-form .record-title-field { flex-basis:calc(100% - 66px); } .entry-form input[type=time] { flex:1; width:auto; } .timeline-form .time-fields { order:2; flex:1; } .timeline-form .record-title-field { order:1; } .timeline-form select { order:2; flex:1; } .timeline-form .primary-button { order:3; } .record-time { width:92px; flex-basis:92px; } .stats-grid,.book-layout { grid-template-columns:1fr; } .donut { width:150px; height:150px; } .book-list { grid-template-columns:repeat(2,minmax(0,1fr)); } .book-detail { padding:15px; } .book-head { flex-direction:column; } .thought-compose { padding:13px; } .thought-compose textarea { min-height:150px; } }
