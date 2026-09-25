@@ -2,6 +2,8 @@ const STORAGE_KEY = "time-block-pwa-v1";
 const state = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{"tasks":[],"records":[]}');
 state.books ||= [];
 state.dailySummaries ||= [];
+state.pendingTaskUpserts ||= [];
+state.pendingTaskDeletes ||= [];
 state.pendingRecordUpserts ||= [];
 state.pendingRecordDeletes ||= [];
 state.thoughts ||= [];
@@ -47,6 +49,14 @@ const categories = {
   rest: { label: "休息", color: "#6F7392" }
 };
 const categoryData = (records) => Object.keys(categories).map((key) => ({ key, ...categories[key], value: records.filter((record) => (record.category || "fun") === key).reduce((sum, record) => sum + Math.max(0, minutes(record.end) - minutes(record.start)), 0) }));
+function queueTaskUpsert(id) {
+  state.pendingTaskDeletes = state.pendingTaskDeletes.filter((pendingId) => pendingId !== id);
+  if (!state.pendingTaskUpserts.includes(id)) state.pendingTaskUpserts.push(id);
+}
+function queueTaskDelete(id) {
+  state.pendingTaskUpserts = state.pendingTaskUpserts.filter((pendingId) => pendingId !== id);
+  if (!state.pendingTaskDeletes.includes(id)) state.pendingTaskDeletes.push(id);
+}
 function queueRecordUpsert(id) {
   state.pendingRecordDeletes = state.pendingRecordDeletes.filter((pendingId) => pendingId !== id);
   if (!state.pendingRecordUpserts.includes(id)) state.pendingRecordUpserts.push(id);
@@ -119,7 +129,9 @@ async function syncToCloud() {
     tasks.length ? cloud.from("time_tasks").upsert(tasks) : Promise.resolve({ error: null }),
     records.length ? cloud.from("time_records").upsert(records) : Promise.resolve({ error: null })
   ]);
+  if (!taskResult.error) state.pendingTaskUpserts = [];
   if (!recordResult.error) state.pendingRecordUpserts = [];
+  for (const id of [...state.pendingTaskDeletes]) await deleteTaskFromCloud(id);
   for (const id of [...state.pendingRecordDeletes]) await deleteRecordFromCloud(id);
   saveLocal();
   setSyncStatus(taskResult.error || recordResult.error ? "同步失败" : "已同步", !(taskResult.error || recordResult.error));
@@ -133,7 +145,11 @@ async function loadFromCloud() {
     cloud.from("daily_summaries").select("*")
   ]);
   if (taskResult.error || recordResult.error) { setSyncStatus("同步失败"); return; }
-  state.tasks = taskResult.data.map((task) => ({ id: task.id, title: task.title, time: task.planned_time || "", date: task.date, done: task.done }));
+  const pendingTasks = new Map(state.tasks.filter((task) => state.pendingTaskUpserts.includes(task.id)).map((task) => [task.id, task]));
+  const cloudTasks = new Map(taskResult.data.map((task) => [task.id, { id: task.id, title: task.title, time: task.planned_time || "", date: task.date, done: task.done }]));
+  for (const [id, task] of pendingTasks) cloudTasks.set(id, task);
+  for (const id of state.pendingTaskDeletes) cloudTasks.delete(id);
+  state.tasks = [...cloudTasks.values()];
   const pendingUpserts = new Map(state.records.filter((record) => state.pendingRecordUpserts.includes(record.id)).map((record) => [record.id, record]));
   const cloudRecords = new Map(recordResult.data.map((record) => [record.id, { id: record.id, title: record.title, start: record.start_time, end: record.end_time, category: record.category, date: record.date }]));
   for (const [id, record] of pendingUpserts) cloudRecords.set(id, record);
@@ -153,6 +169,7 @@ async function loadFromCloud() {
     state.dailySummaries = [...cloudSummaries.values()];
   }
   saveLocal(); renderTasks(); renderRecords(); renderStats(); renderDailySummaries(); renderDateControls();
+  if (state.pendingTaskUpserts.length || state.pendingTaskDeletes.length) await syncToCloud();
   for (const id of [...state.pendingRecordUpserts]) {
     const record = state.records.find((item) => item.id === id);
     if (record) await syncRecordToCloud(record);
@@ -161,6 +178,14 @@ async function loadFromCloud() {
   if (summaryResult.error) { setSyncStatus("日程已同步；总结读取失败", false); return; }
   for (const summary of summariesToUpload) await syncDailySummaryToCloud(summary);
   setSyncStatus("已同步", true);
+}
+async function deleteTaskFromCloud(id) {
+  if (!cloudUser || !cloud) return { ok: false, local: true };
+  const { error } = await cloud.from("time_tasks").delete().eq("id", id);
+  if (error) { setSyncStatus(`删除任务失败：${error.message || "网络或权限异常"}`, false); return { ok: false }; }
+  state.pendingTaskDeletes = state.pendingTaskDeletes.filter((pendingId) => pendingId !== id);
+  saveLocal();
+  return { ok: true };
 }
 async function syncRecordToCloud(record) {
   if (!cloudUser || !cloud) return { ok: false, local: true };
@@ -770,7 +795,7 @@ document.addEventListener("submit", async (event) => {
   if (!["excerptForm", "reflectionForm"].includes(event.target.id)) return;
   event.preventDefault(); const book = state.books.find((item) => item.id === selectedBookId); if (!book) return; const isExcerpt = event.target.id === "excerptForm"; const text = $(isExcerpt ? "#excerptText" : "#reflectionText").value.trim(); const image = await imageData($(isExcerpt ? "#excerptImage" : "#reflectionImage").files[0]); if (!text && !image) return; const field = isExcerpt ? "excerpts" : "reflections"; book[field] ||= []; book[field].unshift({ id: uid(), text, image }); saveBooks();
 });
-$("#taskForm").addEventListener("submit", (event) => { event.preventDefault(); const title = $("#taskTitle").value.trim(); if (!title) return; state.tasks.push({ id: uid(), title, time: $("#taskTime").value, date: selectedDate, done: false }); save(); event.target.reset(); renderTasks(); $("#taskTitle").focus(); });
+$("#taskForm").addEventListener("submit", (event) => { event.preventDefault(); const title = $("#taskTitle").value.trim(); if (!title) return; const task = { id: uid(), title, time: $("#taskTime").value, date: selectedDate, done: false }; state.tasks.push(task); queueTaskUpsert(task.id); save(); event.target.reset(); renderTasks(); $("#taskTitle").focus(); });
 $("#recordForm").addEventListener("submit", async (event) => { event.preventDefault(); const title = $("#recordTitle").value.trim(); const start = $("#recordStart").value; const end = $("#recordEnd").value; if (!title || title.length > 500 || !start || !end || minutes(end) <= minutes(start)) { setSyncStatus("请填写内容，并确认结束时间晚于开始时间"); return; } const record = { id: uid(), title, start, end, category: $("#recordCategory").value, date: selectedDate }; state.records.push(record); queueRecordUpsert(record.id); saveLocal(); event.target.reset(); updateRecordCount(); renderRecords(); renderStats(); renderDateControls(); await syncRecordToCloud(record); $("#recordTitle").focus(); });
 $("#recordEditForm").addEventListener("submit", saveRecordEdit);
 $("#recordEditClose").addEventListener("click", () => $("#recordDialog").close());
@@ -801,12 +826,12 @@ document.addEventListener("click", async (event) => { const view = event.target.
   const summaryEdit = event.target.closest("[data-summary-edit]"); if (summaryEdit) { openSummaryEditor(summaryEdit.dataset.summaryEdit); return; }
   const summaryDelete = event.target.closest("[data-summary-delete]"); if (summaryDelete) { await removeDailySummary(summaryDelete.dataset.summaryDelete); return; }
   const summaryRetry = event.target.closest("[data-summary-retry]"); if (summaryRetry) { const summary = state.dailySummaries.find((item) => item.id === summaryRetry.dataset.summaryRetry); if (summary) { if (summary.pendingAction === "delete") await removeDailySummary(summary.id, true); else await syncDailySummaryToCloud(summary); } return; }
-  const taskDelete = event.target.closest("[data-task-delete]"); if (taskDelete) { state.tasks = state.tasks.filter((task) => task.id !== taskDelete.dataset.taskDelete); save(); renderTasks(); return; }
+  const taskDelete = event.target.closest("[data-task-delete]"); if (taskDelete) { const id = taskDelete.dataset.taskDelete; state.tasks = state.tasks.filter((task) => task.id !== id); queueTaskDelete(id); save(); renderTasks(); return; }
   const recordDelete = event.target.closest("[data-record-delete]"); if (recordDelete) { const id = recordDelete.dataset.recordDelete; state.records = state.records.filter((record) => record.id !== id); queueRecordDelete(id); saveLocal(); renderRecords(); renderStats(); renderDateControls(); await deleteRecordFromCloud(id); return; }
   const recordEdit = event.target.closest("[data-record-edit]"); if (recordEdit) { openRecordEditor(recordEdit.dataset.recordEdit); return; }
   const recordCard = event.target.closest("[data-record-card]"); if (recordCard && !event.target.closest("button")) openRecordEditor(recordCard.dataset.recordCard);
 });
-document.addEventListener("change", (event) => { const checkbox = event.target.closest("[data-task-check]"); if (!checkbox) return; const task = state.tasks.find((item) => item.id === checkbox.dataset.taskCheck); if (task) task.done = checkbox.checked; save(); renderTasks(); });
+document.addEventListener("change", (event) => { const checkbox = event.target.closest("[data-task-check]"); if (!checkbox) return; const task = state.tasks.find((item) => item.id === checkbox.dataset.taskCheck); if (task) { task.done = checkbox.checked; queueTaskUpsert(task.id); } save(); renderTasks(); });
 document.addEventListener("input", (event) => { const input = event.target.closest("[data-summary-input]"); if (!input) return; const count = document.querySelector(`[data-summary-count="${input.dataset.summaryInput}"]`); if (count) count.textContent = `${input.value.length} / 500`; });
 document.addEventListener("keydown", (event) => { const thoughtCard = event.target.closest?.("[data-thought-open]"); if (thoughtCard && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openThought(thoughtCard.dataset.thoughtOpen); } });
 window.addEventListener("resize", updateThoughtExpanders);
