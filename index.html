@@ -3,35 +3,36 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#f5f3ee" />
-    <meta name="description" content="只属于你的今日任务与24小时记录。" />
+    <meta name="theme-color" content="#F7F7F5" />
+    <meta name="description" content="RIGHT NOW：私人时间、阅读与思考记录。" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=9" />
-    <title>此刻 · 时间记录</title>
+    <link rel="stylesheet" href="styles.css?v=10" />
+    <title>RIGHT NOW</title>
   </head>
   <body>
     <main class="app-shell">
       <header class="topbar">
-        <div class="brand-lockup">
-          <p class="eyebrow">MY DAY</p>
-          <h1>此刻</h1>
+        <h1>RIGHT NOW</h1>
+        <div class="date-navigator" aria-label="选择记录日期">
+          <button class="date-icon-button" type="button" id="previousDateButton" aria-label="前一天" title="前一天">‹</button>
+          <button class="selected-date-button" type="button" id="selectedDateButton" aria-haspopup="dialog" aria-label="选择日期"><span id="timelineDateLabel"></span><span aria-hidden="true">▾</span></button>
+          <button class="date-today-button" type="button" id="todayDateButton">今天</button>
+          <button class="date-icon-button" type="button" id="nextDateButton" aria-label="后一天" title="后一天">›</button>
         </div>
-        <button class="thought-entry" id="thoughtEntryButton" type="button"><span class="thought-entry-long">沉淀下来的思考与决心</span><span class="thought-entry-short">思考与决心</span></button>
-        <button class="icon-button" id="installButton" type="button" aria-label="安装到主屏幕" title="安装到主屏幕" hidden>＋</button>
+        <section class="sync-bar" id="syncBar" aria-label="同步状态">
+          <div><span class="sync-icon" id="syncDot" aria-hidden="true">✓</span><span id="syncStatus">本机模式</span></div>
+          <button class="logout-button" id="emailConfirmButton" type="button">连接同步</button>
+          <button class="logout-button" id="retrySyncButton" type="button" hidden>同步</button>
+          <button class="icon-button" id="installButton" type="button" aria-label="安装到主屏幕" title="安装到主屏幕" hidden>＋</button>
+        </section>
       </header>
 
-      <section class="sync-bar" id="syncBar">
-        <div><span class="sync-dot" id="syncDot"></span><span id="syncStatus">本机模式</span></div>
-        <button class="logout-button" id="emailConfirmButton" type="button">发送 QQ 登录链接</button>
-        <button class="logout-button" id="retrySyncButton" type="button" hidden>立即同步</button>
-      </section>
-
       <nav class="tabs" aria-label="主要视图">
-        <button class="tab is-active" data-view="tasks" type="button">今日任务</button>
-        <button class="tab" data-view="timeline" type="button">24 小时记录</button>
-        <button class="tab" data-view="stats" type="button">统计数据</button>
-        <button class="tab" data-view="books" type="button">阅读笔记</button>
+        <button class="tab is-active" data-view="tasks" type="button">MISSION</button>
+        <button class="tab" data-view="timeline" type="button">24 HOURS</button>
+        <button class="tab" data-view="stats" type="button">STATISTICS</button>
+        <button class="tab" data-view="books" type="button">READING NOTES</button>
       </nav>
 
       <section class="view is-visible" id="tasksView" aria-labelledby="tasksHeading">
@@ -43,8 +44,8 @@
           <span class="progress" id="taskProgress">0 / 0</span>
         </div>
         <form class="entry-form" id="taskForm">
-          <input id="taskTitle" type="text" maxlength="80" placeholder="添加一件今天要做的事" autocomplete="off" required />
-          <input id="taskTime" type="time" aria-label="预计时间" />
+          <label class="visually-hidden" for="taskTitle">任务</label><input id="taskTitle" type="text" maxlength="80" placeholder="添加一件这天要做的事" autocomplete="off" required />
+          <label class="visually-hidden" for="taskTime">预计时间</label><input id="taskTime" type="time" aria-label="预计时间" />
           <button class="primary-button" type="submit" aria-label="添加任务" title="添加任务">添加</button>
         </form>
         <div class="list" id="taskList"></div>
@@ -54,23 +55,17 @@
       <section class="view" id="timelineView" aria-labelledby="timelineHeading">
         <div class="section-heading">
           <div>
-            <div class="date-navigator" aria-label="选择记录日期">
-              <button class="date-icon-button" type="button" id="previousDateButton" aria-label="前一天" title="前一天">‹</button>
-              <button class="selected-date-button" type="button" id="selectedDateButton" aria-haspopup="dialog" aria-label="选择日期"><span id="timelineDateLabel"></span><span aria-hidden="true">▾</span></button>
-              <button class="date-today-button" type="button" id="todayDateButton">今天</button>
-              <button class="date-icon-button" type="button" id="nextDateButton" aria-label="后一天" title="后一天">›</button>
-            </div>
             <h2 id="timelineHeading">这一天做了什么？</h2>
           </div>
           <span class="time-total" id="timeTotal">0 小时</span>
         </div>
         <form class="entry-form timeline-form" id="recordForm">
-          <div class="time-fields">
+          <div class="time-fields"><label class="visually-hidden" for="recordStart">开始时间</label>
             <input id="recordStart" type="time" aria-label="开始时间" required />
             <span>至</span>
             <input id="recordEnd" type="time" aria-label="结束时间" required />
           </div>
-          <div class="record-title-field"><textarea id="recordTitle" maxlength="500" placeholder="记录这段时间做了什么" autocomplete="off" required></textarea><span class="char-count" id="recordTitleCount">0 / 500</span></div>
+          <div class="record-title-field"><label class="visually-hidden" for="recordTitle">记录内容</label><textarea id="recordTitle" maxlength="500" placeholder="记录这段时间做了什么" autocomplete="off" required></textarea><span class="char-count" id="recordTitleCount">0 / 500</span></div>
           <div class="category-picker"><span class="category-swatch" id="recordCategorySwatch" aria-hidden="true"></span><select id="recordCategory" aria-label="事件分类">
             <option value="money">钱</option>
             <option value="learning">学习</option>
@@ -109,7 +104,7 @@
 
       <section class="view" id="booksView" aria-labelledby="booksHeading">
         <div class="section-heading">
-          <div><p class="date-label">READING ARCHIVE</p><h2 id="booksHeading">读过的书，留下点什么</h2></div>
+          <div><p class="date-label" id="booksDateLabel"></p><h2 id="booksHeading">这一天的阅读记录</h2></div>
           <button class="primary-button compact-button" id="newBookButton" type="button">新建书籍</button>
         </div>
         <div class="book-layout">
@@ -122,9 +117,10 @@
 
       <section class="view thoughts-view" id="thoughtsView" aria-labelledby="thoughtsHeading">
         <div class="thoughts-heading">
-          <button class="text-button thought-back-button" id="thoughtBackButton" type="button">‹ 返回此刻</button>
+          <button class="text-button thought-back-button" id="thoughtBackButton" type="button">‹ 返回 RIGHT NOW</button>
           <p class="date-label">THOUGHTS</p>
-          <h2 id="thoughtsHeading">沉淀下来的思考与决心</h2>
+          <p class="date-label" id="thoughtsDateLabel"></p>
+          <h2 id="thoughtsHeading">写下此刻真正想明白的事</h2>
         </div>
         <form class="thought-compose" id="thoughtForm">
           <textarea class="thought-title-input" id="thoughtTitle" placeholder="给这段思考一个标题" required></textarea>
@@ -138,7 +134,8 @@
         </section>
       </section>
 
-      <footer class="footer-note">所有内容只保存在这台设备上</footer>
+      <button class="thought-entry" id="thoughtEntryButton" type="button">THOUGHTS <span aria-hidden="true">→</span></button>
+      <footer class="footer-note">内容优先保存在本机，并在连接后同步</footer>
     </main>
     <dialog class="calendar-dialog" id="dateCalendar">
       <div class="calendar-header"><button class="date-icon-button" type="button" id="previousMonthButton" aria-label="上个月">‹</button><strong id="calendarMonthLabel"></strong><button class="date-icon-button" type="button" id="nextMonthButton" aria-label="下个月">›</button></div>
@@ -174,6 +171,6 @@
       </form>
     </dialog>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=29"></script>
+    <script src="app.js?v=30"></script>
   </body>
 </html>

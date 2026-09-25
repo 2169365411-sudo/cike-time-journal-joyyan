@@ -10,7 +10,7 @@ state.pendingThoughtDeletes ||= [];
 function deriveThoughtTitle(content) {
   return content.split(/\r?\n/).map((line) => line.trim()).find(Boolean) || "未命名思考";
 }
-state.thoughts.forEach((thought) => { thought.title ||= deriveThoughtTitle(thought.content || ""); });
+state.thoughts.forEach((thought) => { thought.title ||= deriveThoughtTitle(thought.content || ""); thought.date ||= String(thought.createdAt || "").slice(0, 10); });
 const $ = (selector) => document.querySelector(selector);
 const localDateKey = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 const todayKey = () => localDateKey();
@@ -33,18 +33,18 @@ const cloud = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY, {
 let cloudUser = null;
 const save = () => { saveLocal(); syncToCloud(); };
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-let selectedDate = todayKey();
+const urlDate = new URLSearchParams(window.location.search).get("date");
+let selectedDate = /^\d{4}-\d{2}-\d{2}$/.test(urlDate || "") ? urlDate : todayKey();
 let calendarMonth = new Date(dateFromKey(selectedDate).getFullYear(), dateFromKey(selectedDate).getMonth(), 1);
 const formatDate = (value = selectedDate) => new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric", weekday: "long" }).format(dateFromKey(value));
 const formatDateTime = (value) => new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value));
 const minutes = (time) => { const [h, m] = time.split(":").map(Number); return h * 60 + m; };
 const categories = {
-  money: { label: "钱", color: "#f4d34f" },
-  learning: { label: "学习", color: "#72c579" },
-  network: { label: "人脉", color: "#ef5b56" },
-  fun: { label: "娱乐", color: "#ed82b4" },
-  // PANTONE 17-3938 (Very Peri) screen-color mapping.
-  rest: { label: "休息", color: "#6667AB" }
+  money: { label: "钱", color: "#A38652" },
+  learning: { label: "学习", color: "#596875" },
+  network: { label: "人脉", color: "#9A6B68" },
+  fun: { label: "娱乐", color: "#98798B" },
+  rest: { label: "休息", color: "#6F7392" }
 };
 const categoryData = (records) => Object.keys(categories).map((key) => ({ key, ...categories[key], value: records.filter((record) => (record.category || "fun") === key).reduce((sum, record) => sum + Math.max(0, minutes(record.end) - minutes(record.start)), 0) }));
 function queueRecordUpsert(id) {
@@ -450,7 +450,7 @@ function showView(name) {
 }
 
 function renderTasks() {
-  const tasks = state.tasks.filter((task) => task.date === todayKey());
+  const tasks = state.tasks.filter((task) => task.date === selectedDate);
   const list = $("#taskList");
   list.innerHTML = tasks.map((task) => `
     <div class="task-item">
@@ -473,18 +473,27 @@ function renderRecords() {
 
 function renderDateControls() {
   $("#timelineDateLabel").textContent = formatDate(selectedDate);
-  $("#nextDateButton").disabled = selectedDate >= todayKey();
+  $("#todayLabel").textContent = formatDate(selectedDate);
+  $("#tasksHeading").textContent = selectedDate === todayKey() ? "今天准备做什么？" : "这一天准备做什么？";
+  $("#booksDateLabel").textContent = `${formatDate(selectedDate)}的阅读记录`;
+  $("#thoughtsDateLabel").textContent = formatDate(selectedDate);
+  $("#nextDateButton").disabled = false;
 }
 function setSelectedDate(value) {
-  if (!value || value > todayKey()) return;
+  if (!value) return;
   selectedDate = value;
   calendarMonth = new Date(dateFromKey(value).getFullYear(), dateFromKey(value).getMonth(), 1);
-  renderDateControls(); renderRecords(); renderDailySummaries(); renderStats();
+  const url = new URL(window.location.href);
+  url.searchParams.set("date", value);
+  history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  renderDateControls(); renderTasks(); renderRecords(); renderDailySummaries(); renderStats(); renderBooks(); renderThoughts();
 }
 function activeDateKeys() {
   return new Set([
     ...state.records.map((record) => record.date),
-    ...state.dailySummaries.filter((summary) => summary.content?.trim()).map((summary) => summary.date)
+    ...state.dailySummaries.filter((summary) => summary.content?.trim()).map((summary) => summary.date),
+    ...state.tasks.map((task) => task.date),
+    ...state.thoughts.map((thought) => thought.date || localDateKey(new Date(thought.createdAt)))
   ]);
 }
 function renderCalendar() {
@@ -492,17 +501,15 @@ function renderCalendar() {
   const month = calendarMonth.getMonth();
   const firstDay = new Date(year, month, 1).getDay();
   const days = new Date(year, month + 1, 0).getDate();
-  const today = todayKey();
   const activeDates = activeDateKeys();
   $("#calendarMonthLabel").textContent = `${year}年${month + 1}月`;
-  $("#nextMonthButton").disabled = new Date(year, month + 1, 1) > new Date(dateFromKey(today).getFullYear(), dateFromKey(today).getMonth(), 1);
+  $("#nextMonthButton").disabled = false;
   $("#calendarGrid").innerHTML = `${"<span></span>".repeat(firstDay)}${Array.from({ length: days }, (_, index) => {
     const day = index + 1;
     const key = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     const selected = key === selectedDate ? " is-selected" : "";
-    const current = key === today ? " is-today" : "";
-    const disabled = key > today ? " disabled" : "";
-    return `<button class="calendar-day${selected}${current}" type="button" data-calendar-date="${key}"${disabled}>${day}${activeDates.has(key) ? '<span class="calendar-dot"></span>' : ""}</button>`;
+    const current = key === todayKey() ? " is-today" : "";
+    return `<button class="calendar-day${selected}${current}" type="button" data-calendar-date="${key}">${day}${activeDates.has(key) ? '<span class="calendar-dot"></span>' : ""}</button>`;
   }).join("")}`;
 }
 function renderDailySummaries() {
@@ -532,7 +539,8 @@ function renderStats() {
   const allTotal = allData.reduce((sum, item) => sum + item.value, 0);
   $("#statsDateLabel").textContent = formatDate(selectedDate);
   $("#dailyStatsLabel").textContent = selectedDate === todayKey() ? "今天" : formatDate(selectedDate);
-  $("#statsTotal").textContent = `${(allTotal / 60).toFixed(allTotal % 60 ? 1 : 0)} 小时`;
+  const dailyTotal = dailyData.reduce((sum, item) => sum + item.value, 0);
+  $("#statsTotal").textContent = `${(dailyTotal / 60).toFixed(dailyTotal % 60 ? 1 : 0)} 小时`;
   renderChart("dailyDonut", "dailyLegend", "dailyTotal", dailyData);
   renderChart("totalDonut", "totalLegend", "allTotal", allData);
 }
@@ -560,7 +568,7 @@ function updateThoughtExpanders() {
   });
 }
 function renderThoughts() {
-  const thoughts = [...state.thoughts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const thoughts = state.thoughts.filter((thought) => (thought.date || localDateKey(new Date(thought.createdAt))) === selectedDate).sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
   $("#thoughtList").innerHTML = thoughts.map((thought) => `<article class="thought-card" data-thought-open="${thought.id}" role="button" tabindex="0"><div class="thought-card-header"><div class="thought-card-ident"><span class="thought-card-date">${formatDateTime(thought.createdAt)}</span><span class="thought-card-title">${escapeHtml(thought.title || deriveThoughtTitle(thought.content || ""))}</span></div><div class="thought-card-status"><span class="summary-status ${thoughtStatusClass(thought)}">${thoughtSyncMeta(thought)}</span>${thoughtActionControl(thought)}</div></div><p class="thought-card-copy ${expandedThoughtIds.has(thought.id) ? "is-expanded" : ""}" data-thought-copy="${thought.id}">${escapeHtml(thought.content)}</p><div class="thought-card-footer"><span>${thoughtTimeLabel(thought)}</span><div class="thought-card-actions">${thought.syncState === "failed" ? `<button class="text-button" type="button" data-thought-retry="${thought.id}">重试</button>` : ""}<button class="text-button thought-expand-button" type="button" data-thought-expand="${thought.id}" hidden>显示全部</button></div></div></article>`).join("");
   $("#thoughtEmpty").hidden = thoughts.length > 0;
   const hasFailed = thoughts.some((thought) => thought.syncState === "failed");
@@ -591,7 +599,8 @@ async function saveThought(event) {
   const content = $("#thoughtContent").value.trim();
   if (!title || !content) return;
   const now = new Date().toISOString();
-  const thought = { id: uid(), title, content, createdAt: now, updatedAt: now, syncState: cloudUser ? "syncing" : "local", syncError: "" };
+  const createdAt = `${selectedDate}T12:00:00.000Z`;
+  const thought = { id: uid(), title, content, date: selectedDate, createdAt, updatedAt: now, syncState: cloudUser ? "syncing" : "local", syncError: "" };
   state.thoughts.unshift(thought);
   queueThoughtUpsert(thought.id);
   saveLocal();
@@ -608,6 +617,7 @@ async function saveThoughtEdit(event) {
   thought.title = title;
   thought.content = content;
   thought.updatedAt = new Date().toISOString();
+  thought.date = selectedDate;
   thought.syncState = cloudUser ? "syncing" : "local";
   thought.syncError = "";
   queueThoughtUpsert(thought.id);
@@ -729,7 +739,7 @@ async function removeDailySummary(id, confirmed = false) {
   saveLocal(); renderDailySummaries(); renderDateControls();
 }
 
-$("#todayLabel").textContent = formatDate(todayKey());
+$("#todayLabel").textContent = formatDate(selectedDate);
 $("#emailConfirmButton").addEventListener("click", prepareOwnerLogin);
 $("#retrySyncButton").addEventListener("click", async () => {
   if (cloudUser) {
@@ -760,7 +770,7 @@ document.addEventListener("submit", async (event) => {
   if (!["excerptForm", "reflectionForm"].includes(event.target.id)) return;
   event.preventDefault(); const book = state.books.find((item) => item.id === selectedBookId); if (!book) return; const isExcerpt = event.target.id === "excerptForm"; const text = $(isExcerpt ? "#excerptText" : "#reflectionText").value.trim(); const image = await imageData($(isExcerpt ? "#excerptImage" : "#reflectionImage").files[0]); if (!text && !image) return; const field = isExcerpt ? "excerpts" : "reflections"; book[field] ||= []; book[field].unshift({ id: uid(), text, image }); saveBooks();
 });
-$("#taskForm").addEventListener("submit", (event) => { event.preventDefault(); const title = $("#taskTitle").value.trim(); if (!title) return; state.tasks.push({ id: uid(), title, time: $("#taskTime").value, date: todayKey(), done: false }); save(); event.target.reset(); renderTasks(); $("#taskTitle").focus(); });
+$("#taskForm").addEventListener("submit", (event) => { event.preventDefault(); const title = $("#taskTitle").value.trim(); if (!title) return; state.tasks.push({ id: uid(), title, time: $("#taskTime").value, date: selectedDate, done: false }); save(); event.target.reset(); renderTasks(); $("#taskTitle").focus(); });
 $("#recordForm").addEventListener("submit", async (event) => { event.preventDefault(); const title = $("#recordTitle").value.trim(); const start = $("#recordStart").value; const end = $("#recordEnd").value; if (!title || title.length > 500 || !start || !end || minutes(end) <= minutes(start)) { setSyncStatus("请填写内容，并确认结束时间晚于开始时间"); return; } const record = { id: uid(), title, start, end, category: $("#recordCategory").value, date: selectedDate }; state.records.push(record); queueRecordUpsert(record.id); saveLocal(); event.target.reset(); updateRecordCount(); renderRecords(); renderStats(); renderDateControls(); await syncRecordToCloud(record); $("#recordTitle").focus(); });
 $("#recordEditForm").addEventListener("submit", saveRecordEdit);
 $("#recordEditClose").addEventListener("click", () => $("#recordDialog").close());
