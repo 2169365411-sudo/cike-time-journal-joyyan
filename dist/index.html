@@ -7,7 +7,7 @@
     <meta name="description" content="只属于你的今日任务与24小时记录。" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=8" />
+    <link rel="stylesheet" href="styles.css?v=9" />
     <title>此刻 · 时间记录</title>
   </head>
   <body>
@@ -127,6 +127,7 @@
           <h2 id="thoughtsHeading">沉淀下来的思考与决心</h2>
         </div>
         <form class="thought-compose" id="thoughtForm">
+          <textarea class="thought-title-input" id="thoughtTitle" placeholder="给这段思考一个标题" required></textarea>
           <textarea id="thoughtContent" placeholder="写下此刻真正想明白的事……" required></textarea>
           <div class="form-footer"><span class="thought-save-status" id="thoughtSaveStatus"></span><button class="primary-button" type="submit">保存思考</button></div>
         </form>
@@ -167,11 +168,12 @@
     <dialog class="record-dialog thought-dialog" id="thoughtEditDialog">
       <form class="record-edit-form" id="thoughtEditForm">
         <div class="dialog-heading"><div><p class="date-label" id="thoughtEditDate"></p><h3>编辑思考</h3></div><button class="delete-button" type="button" id="thoughtEditClose" aria-label="关闭编辑" title="关闭">×</button></div>
+        <textarea class="thought-title-input" id="thoughtEditTitle" placeholder="给这段思考一个标题" required></textarea>
         <textarea id="thoughtEditContent" placeholder="写下此刻真正想明白的事……" required></textarea>
         <div class="form-footer"><span class="thought-save-status" id="thoughtEditStatus"></span><button class="primary-button" type="submit">保存修改</button></div>
       </form>
     </dialog>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=28"></script>
+    <script src="app.js?v=29"></script>
   </body>
 </html>

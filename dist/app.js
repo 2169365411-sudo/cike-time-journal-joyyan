@@ -7,6 +7,10 @@ state.pendingRecordDeletes ||= [];
 state.thoughts ||= [];
 state.pendingThoughtUpserts ||= [];
 state.pendingThoughtDeletes ||= [];
+function deriveThoughtTitle(content) {
+  return content.split(/\r?\n/).map((line) => line.trim()).find(Boolean) || "未命名思考";
+}
+state.thoughts.forEach((thought) => { thought.title ||= deriveThoughtTitle(thought.content || ""); });
 const $ = (selector) => document.querySelector(selector);
 const localDateKey = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 const todayKey = () => localDateKey();
@@ -66,6 +70,8 @@ function queueThoughtDelete(id) {
   if (!state.pendingThoughtDeletes.includes(id)) state.pendingThoughtDeletes.push(id);
 }
 let selectedBookId = state.books[0]?.id || null;
+let activeThoughtMenuId = null;
+const expandedThoughtIds = new Set();
 const summaryKey = (summary) => `${summary.date}:${summary.slot}`;
 const summaryPrompts = ["今天最值得记录的一件事", "今天学到或意识到什么", "明天最重要的一件事"];
 
@@ -294,6 +300,7 @@ function thoughtSyncMeta(thought) {
 function thoughtErrorMessage(error, action = "保存") {
   const message = error?.message || "网络或权限异常";
   if (/relation .*thought_entries|does not exist/i.test(message)) return `${action}失败：思考数据表尚未完成升级`;
+  if (/column .*title|title .*column/i.test(message)) return `${action}失败：思考标题数据尚未完成升级`;
   if (/row-level security|permission denied/i.test(message)) return `${action}失败：没有写入权限`;
   return `${action}失败：${message}`;
 }
@@ -307,7 +314,7 @@ async function syncThoughtToCloud(thought) {
   thought.syncError = "";
   saveLocal(); renderThoughts();
   setSyncStatus("正在同步思考", true);
-  const { error } = await cloud.from("thought_entries").upsert({ id: thought.id, user_id: cloudUser.id, content: thought.content, created_at: thought.createdAt, updated_at: thought.updatedAt });
+  const { error } = await cloud.from("thought_entries").upsert({ id: thought.id, user_id: cloudUser.id, title: thought.title, content: thought.content, created_at: thought.createdAt, updated_at: thought.updatedAt });
   if (error) {
     thought.syncState = "failed";
     thought.syncError = thoughtErrorMessage(error);
@@ -347,7 +354,7 @@ async function loadThoughtsFromCloud() {
   const { data, error } = await cloud.from("thought_entries").select("*").order("created_at", { ascending: false });
   if (error) { setSyncStatus(thoughtErrorMessage(error, "读取"), false); return; }
   const localPending = new Map(state.thoughts.filter((thought) => state.pendingThoughtUpserts.includes(thought.id)).map((thought) => [thought.id, thought]));
-  const cloudThoughts = new Map(data.map((thought) => [thought.id, { id: thought.id, content: thought.content, createdAt: thought.created_at, updatedAt: thought.updated_at, syncState: "synced", syncError: "" }]));
+  const cloudThoughts = new Map(data.map((thought) => [thought.id, { id: thought.id, title: thought.title || deriveThoughtTitle(thought.content || ""), content: thought.content, createdAt: thought.created_at, updatedAt: thought.updated_at, syncState: "synced", syncError: "" }]));
   for (const [id, thought] of localPending) cloudThoughts.set(id, thought);
   for (const id of state.pendingThoughtDeletes) cloudThoughts.delete(id);
   state.thoughts = [...cloudThoughts.values()];
@@ -439,6 +446,7 @@ function showView(name) {
   document.querySelectorAll(".view").forEach((section) => section.classList.toggle("is-visible", section.id === `${name}View`));
   $(".app-shell").classList.toggle("is-thoughts-open", name === "thoughts");
   $("#thoughtEntryButton").classList.toggle("is-active", name === "thoughts");
+  if (name === "thoughts") updateThoughtExpanders();
 }
 
 function renderTasks() {
@@ -529,33 +537,49 @@ function renderStats() {
   renderChart("totalDonut", "totalLegend", "allTotal", allData);
 }
 
-function thoughtPreview(content) {
-  const compact = content.replace(/\s+/g, " ").trim();
-  return compact.length > 180 ? `${compact.slice(0, 180)}…` : compact;
-}
 function thoughtTimeLabel(thought) {
   const updated = thought.updatedAt && thought.updatedAt !== thought.createdAt;
   return updated ? `最后编辑于 ${formatDateTime(thought.updatedAt)}` : `记录于 ${formatDateTime(thought.createdAt)}`;
 }
+function thoughtStatusClass(thought) {
+  return thought.syncState === "failed" ? "is-failed" : thought.syncState === "synced" ? "is-synced" : "";
+}
+function thoughtActionControl(thought) {
+  const isOpen = activeThoughtMenuId === thought.id;
+  return `<div class="thought-action-wrap"><button class="thought-action-button" type="button" data-thought-menu="${thought.id}" aria-label="编辑或删除" title="编辑或删除" aria-expanded="${isOpen}"><span class="visually-hidden">编辑或删除</span></button>${isOpen ? `<div class="thought-action-menu"><button type="button" data-thought-edit="${thought.id}">编辑</button><button class="is-danger" type="button" data-thought-delete="${thought.id}">删除</button></div>` : ""}</div>`;
+}
+function updateThoughtExpanders() {
+  requestAnimationFrame(() => {
+    document.querySelectorAll("[data-thought-copy]").forEach((copy) => {
+      const button = document.querySelector(`[data-thought-expand="${copy.dataset.thoughtCopy}"]`);
+      if (!button) return;
+      const expanded = expandedThoughtIds.has(copy.dataset.thoughtCopy);
+      button.hidden = !expanded && copy.scrollHeight <= copy.clientHeight + 1;
+      button.textContent = expanded ? "收起" : "显示全部";
+    });
+  });
+}
 function renderThoughts() {
   const thoughts = [...state.thoughts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  $("#thoughtList").innerHTML = thoughts.map((thought) => `<article class="thought-card" data-thought-open="${thought.id}" role="button" tabindex="0"><div class="thought-card-header"><span class="thought-card-date">${formatDateTime(thought.createdAt)}</span><span class="summary-status ${thought.syncState === "failed" ? "is-failed" : thought.syncState === "synced" ? "is-synced" : ""}">${thoughtSyncMeta(thought)}</span></div><p class="thought-card-copy">${escapeHtml(thoughtPreview(thought.content))}</p><div class="thought-card-footer"><span>${thoughtTimeLabel(thought)}</span><div class="thought-card-actions">${thought.syncState === "failed" ? `<button class="text-button" type="button" data-thought-retry="${thought.id}">重试</button>` : ""}<button class="text-button" type="button" data-thought-edit="${thought.id}">编辑</button><button class="delete-button" type="button" data-thought-delete="${thought.id}" aria-label="删除思考" title="删除">×</button></div></div></article>`).join("");
+  $("#thoughtList").innerHTML = thoughts.map((thought) => `<article class="thought-card" data-thought-open="${thought.id}" role="button" tabindex="0"><div class="thought-card-header"><div class="thought-card-ident"><span class="thought-card-date">${formatDateTime(thought.createdAt)}</span><span class="thought-card-title">${escapeHtml(thought.title || deriveThoughtTitle(thought.content || ""))}</span></div><div class="thought-card-status"><span class="summary-status ${thoughtStatusClass(thought)}">${thoughtSyncMeta(thought)}</span>${thoughtActionControl(thought)}</div></div><p class="thought-card-copy ${expandedThoughtIds.has(thought.id) ? "is-expanded" : ""}" data-thought-copy="${thought.id}">${escapeHtml(thought.content)}</p><div class="thought-card-footer"><span>${thoughtTimeLabel(thought)}</span><div class="thought-card-actions">${thought.syncState === "failed" ? `<button class="text-button" type="button" data-thought-retry="${thought.id}">重试</button>` : ""}<button class="text-button thought-expand-button" type="button" data-thought-expand="${thought.id}" hidden>显示全部</button></div></div></article>`).join("");
   $("#thoughtEmpty").hidden = thoughts.length > 0;
   const hasFailed = thoughts.some((thought) => thought.syncState === "failed");
   const hasLocal = thoughts.some((thought) => thought.syncState === "local");
   $("#thoughtSaveStatus").textContent = hasFailed ? "有思考尚未保存" : hasLocal ? "仅本机保存" : thoughts.length ? "已同步" : "";
+  updateThoughtExpanders();
 }
 function openThought(id) {
   const thought = state.thoughts.find((item) => item.id === id);
   if (!thought) return;
-  $("#thoughtDialogContent").innerHTML = `<div class="dialog-heading"><div><p class="date-label">${formatDateTime(thought.createdAt)}</p><h3>沉淀下来的思考</h3></div><button class="delete-button" type="button" data-thought-close aria-label="关闭阅读" title="关闭">×</button></div><p class="thought-dialog-copy">${escapeHtml(thought.content)}</p><div class="thought-dialog-footer"><span class="thought-dialog-meta">${thoughtTimeLabel(thought)}</span><div><button class="text-button" type="button" data-thought-edit="${thought.id}">编辑</button><button class="delete-button" type="button" data-thought-delete="${thought.id}" aria-label="删除思考" title="删除">×</button></div></div>`;
-  $("#thoughtDialog").showModal();
+  $("#thoughtDialogContent").innerHTML = `<div class="dialog-heading"><div><p class="date-label">${formatDateTime(thought.createdAt)}</p><h3>${escapeHtml(thought.title || deriveThoughtTitle(thought.content || ""))}</h3></div><div class="thought-card-status"><span class="summary-status ${thoughtStatusClass(thought)}">${thoughtSyncMeta(thought)}</span>${thoughtActionControl(thought)}<button class="delete-button" type="button" data-thought-close aria-label="关闭阅读" title="关闭">×</button></div></div><p class="thought-dialog-copy">${escapeHtml(thought.content)}</p><div class="thought-dialog-footer"><span class="thought-dialog-meta">${thoughtTimeLabel(thought)}</span></div>`;
+  if (!$("#thoughtDialog").open) $("#thoughtDialog").showModal();
 }
 function openThoughtEditor(id) {
   const thought = state.thoughts.find((item) => item.id === id);
   if (!thought) return;
   $("#thoughtEditForm").dataset.thoughtId = id;
   $("#thoughtEditDate").textContent = formatDateTime(thought.createdAt);
+  $("#thoughtEditTitle").value = thought.title || deriveThoughtTitle(thought.content || "");
   $("#thoughtEditContent").value = thought.content;
   $("#thoughtEditStatus").textContent = thoughtSyncMeta(thought);
   if ($("#thoughtDialog").open) $("#thoughtDialog").close();
@@ -563,10 +587,11 @@ function openThoughtEditor(id) {
 }
 async function saveThought(event) {
   event.preventDefault();
+  const title = $("#thoughtTitle").value.trim();
   const content = $("#thoughtContent").value.trim();
-  if (!content) return;
+  if (!title || !content) return;
   const now = new Date().toISOString();
-  const thought = { id: uid(), content, createdAt: now, updatedAt: now, syncState: cloudUser ? "syncing" : "local", syncError: "" };
+  const thought = { id: uid(), title, content, createdAt: now, updatedAt: now, syncState: cloudUser ? "syncing" : "local", syncError: "" };
   state.thoughts.unshift(thought);
   queueThoughtUpsert(thought.id);
   saveLocal();
@@ -577,8 +602,10 @@ async function saveThought(event) {
 async function saveThoughtEdit(event) {
   event.preventDefault();
   const thought = state.thoughts.find((item) => item.id === event.currentTarget.dataset.thoughtId);
+  const title = $("#thoughtEditTitle").value.trim();
   const content = $("#thoughtEditContent").value.trim();
-  if (!thought || !content) return;
+  if (!thought || !title || !content) return;
+  thought.title = title;
   thought.content = content;
   thought.updatedAt = new Date().toISOString();
   thought.syncState = cloudUser ? "syncing" : "local";
@@ -593,6 +620,8 @@ async function removeThought(id) {
   const thought = state.thoughts.find((item) => item.id === id);
   if (!thought || !window.confirm("删除后无法恢复，确定删除这篇思考吗？")) return;
   state.thoughts = state.thoughts.filter((item) => item.id !== id);
+  activeThoughtMenuId = null;
+  expandedThoughtIds.delete(id);
   queueThoughtDelete(id);
   saveLocal();
   if ($("#thoughtDialog").open) $("#thoughtDialog").close();
@@ -751,6 +780,9 @@ $("#nextDateButton").addEventListener("click", () => { const date = dateFromKey(
 $("#todayDateButton").addEventListener("click", () => setSelectedDate(todayKey()));
 $("#calendarGrid").addEventListener("click", (event) => { const day = event.target.closest("[data-calendar-date]"); if (!day) return; setSelectedDate(day.dataset.calendarDate); $("#dateCalendar").close(); });
 document.addEventListener("click", async (event) => { const view = event.target.closest("[data-view]"); if (view) { showView(view.dataset.view); return; }
+  const thoughtMenu = event.target.closest("[data-thought-menu]"); if (thoughtMenu) { const id = thoughtMenu.dataset.thoughtMenu; activeThoughtMenuId = activeThoughtMenuId === id ? null : id; if ($("#thoughtDialog").open) openThought(id); else renderThoughts(); return; }
+  const thoughtExpand = event.target.closest("[data-thought-expand]"); if (thoughtExpand) { const id = thoughtExpand.dataset.thoughtExpand; if (expandedThoughtIds.has(id)) expandedThoughtIds.delete(id); else expandedThoughtIds.add(id); renderThoughts(); return; }
+  if (activeThoughtMenuId && !event.target.closest(".thought-action-wrap")) { activeThoughtMenuId = null; if ($("#thoughtDialog").open) openThought($("#thoughtDialogContent").querySelector("[data-thought-menu]")?.dataset.thoughtMenu); else renderThoughts(); }
   const thoughtClose = event.target.closest("[data-thought-close]"); if (thoughtClose) { $("#thoughtDialog").close(); return; }
   const thoughtRetry = event.target.closest("[data-thought-retry]"); if (thoughtRetry) { const thought = state.thoughts.find((item) => item.id === thoughtRetry.dataset.thoughtRetry); if (thought) await syncThoughtToCloud(thought); return; }
   const thoughtDelete = event.target.closest("[data-thought-delete]"); if (thoughtDelete) { await removeThought(thoughtDelete.dataset.thoughtDelete); return; }
@@ -767,6 +799,7 @@ document.addEventListener("click", async (event) => { const view = event.target.
 document.addEventListener("change", (event) => { const checkbox = event.target.closest("[data-task-check]"); if (!checkbox) return; const task = state.tasks.find((item) => item.id === checkbox.dataset.taskCheck); if (task) task.done = checkbox.checked; save(); renderTasks(); });
 document.addEventListener("input", (event) => { const input = event.target.closest("[data-summary-input]"); if (!input) return; const count = document.querySelector(`[data-summary-count="${input.dataset.summaryInput}"]`); if (count) count.textContent = `${input.value.length} / 500`; });
 document.addEventListener("keydown", (event) => { const thoughtCard = event.target.closest?.("[data-thought-open]"); if (thoughtCard && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openThought(thoughtCard.dataset.thoughtOpen); } });
+window.addEventListener("resize", updateThoughtExpanders);
 
 let deferredPrompt;
 window.addEventListener("beforeinstallprompt", (event) => { event.preventDefault(); deferredPrompt = event; $("#installButton").hidden = false; });

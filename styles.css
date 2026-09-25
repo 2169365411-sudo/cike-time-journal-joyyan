@@ -162,21 +162,34 @@ input:focus,textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px rg
 .thought-back-button { color:var(--accent-dark); padding:0; }
 .thought-compose { display:grid; gap:10px; padding:16px; border:1px solid var(--line); border-radius:8px; background:rgba(255,254,250,.72); }
 .thought-compose textarea,.thought-dialog textarea { width:100%; min-height:180px; resize:vertical; line-height:1.7; }
+.thought-compose .thought-title-input,.thought-dialog .thought-title-input { min-height:50px; line-height:1.45; font-weight:600; }
 .thought-save-status { color:var(--muted); font-size:12px; }
 .thought-archive { margin-top:32px; padding-top:22px; border-top:1px solid var(--line); }
 .thought-archive h3 { margin:0 0 13px; font:600 20px/1.2 Georgia, "Songti SC", serif; }
 .thought-list { display:grid; gap:10px; }
 .thought-card { width:100%; border:1px solid var(--line); border-radius:8px; padding:15px; background:var(--card); text-align:left; }
 .thought-card:hover { border-color:var(--accent); }
-.thought-card-header,.thought-card-footer,.thought-card-actions { display:flex; align-items:center; }
+.thought-card-header,.thought-card-footer,.thought-card-actions,.thought-card-ident,.thought-card-status { display:flex; align-items:center; }
 .thought-card-header,.thought-card-footer { justify-content:space-between; gap:12px; }
+.thought-card-ident { min-width:0; flex-wrap:wrap; align-items:baseline; gap:8px; }
+.thought-card-status { flex:none; gap:7px; white-space:nowrap; }
 .thought-card-date,.thought-card-footer { color:var(--muted); font-size:12px; }
-.thought-card-copy { margin:12px 0; color:var(--ink); line-height:1.65; white-space:pre-wrap; overflow-wrap:anywhere; }
+.thought-card-title { color:var(--accent-dark); font-size:14px; font-weight:700; line-height:1.45; overflow-wrap:anywhere; }
+.thought-card-copy { display:-webkit-box; margin:12px 0; color:var(--ink); line-height:1.65; white-space:pre-wrap; overflow:hidden; overflow-wrap:anywhere; -webkit-box-orient:vertical; -webkit-line-clamp:5; }
+.thought-card-copy.is-expanded { display:block; overflow:visible; }
 .thought-card-actions { gap:3px; }
 .thought-card .text-button { padding:4px 7px; }
+.thought-action-wrap { position:relative; display:grid; place-items:center; }
+.thought-action-button { width:28px; height:28px; border:0; padding:0; background:transparent; font-size:12px; cursor:pointer; }
+.thought-action-button::before { content:""; display:block; width:1em; height:1em; margin:auto; border-radius:50%; background:var(--accent-dark); }
+.thought-action-button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:50%; }
+.thought-action-menu { position:absolute; top:calc(100% + 4px); right:0; z-index:4; display:grid; min-width:78px; padding:4px; border:1px solid var(--line); border-radius:6px; background:var(--card); box-shadow:0 8px 20px rgba(32,38,35,.14); }
+.thought-action-menu button { border:0; border-radius:4px; padding:7px 9px; background:transparent; color:var(--ink); font:inherit; font-size:13px; text-align:left; cursor:pointer; }
+.thought-action-menu button:hover { background:rgba(66,185,150,.12); }
+.thought-action-menu .is-danger { color:#bf5a41; }
+.visually-hidden { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
 .thought-dialog-copy { margin:18px 0; white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.75; }
 .thought-dialog-meta { color:var(--muted); font-size:12px; }
 .thought-dialog-footer { display:flex; align-items:center; justify-content:space-between; gap:10px; }
-.thought-dialog-footer > div { display:flex; align-items:center; gap:4px; }
 .footer-note { margin-top:46px; color:#aaa9a2; font-size:12px; text-align:center; }
 @media (max-width:560px) { .app-shell { padding:26px 16px 22px; } .topbar { grid-template-columns:1fr auto auto; gap:10px; } .thought-entry { font-size:14px; } .thought-entry-long { display:none; } .thought-entry-short { display:inline; } h2 { font-size:21px; } .sync-bar { align-items:center; margin-top:-8px; } .entry-form { flex-wrap:wrap; } .entry-form > input:first-child,.timeline-form .record-title-field { flex-basis:calc(100% - 66px); } .entry-form input[type=time] { flex:1; width:auto; } .timeline-form .time-fields { order:2; flex:1; } .timeline-form .record-title-field { order:1; } .timeline-form select { order:2; flex:1; } .timeline-form .primary-button { order:3; } .record-time { width:92px; flex-basis:92px; } .stats-grid,.book-layout { grid-template-columns:1fr; } .donut { width:150px; height:150px; } .book-list { grid-template-columns:repeat(2,minmax(0,1fr)); } .book-detail { padding:15px; } .book-head { flex-direction:column; } .thought-compose { padding:13px; } .thought-compose textarea { min-height:150px; } }

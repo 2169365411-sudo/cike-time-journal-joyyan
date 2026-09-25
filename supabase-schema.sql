@@ -61,6 +61,7 @@ end $$;
 create table if not exists public.thought_entries (
   id text primary key,
   user_id uuid not null references auth.users(id) on delete cascade,
+  title text not null check (char_length(trim(title)) > 0),
   content text not null check (char_length(trim(content)) > 0),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
