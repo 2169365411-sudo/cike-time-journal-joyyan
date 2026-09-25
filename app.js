@@ -131,10 +131,11 @@ async function syncToCloud() {
   ]);
   if (!taskResult.error) state.pendingTaskUpserts = [];
   if (!recordResult.error) state.pendingRecordUpserts = [];
-  for (const id of [...state.pendingTaskDeletes]) await deleteTaskFromCloud(id);
+  const taskDeleteResults = await Promise.all([...state.pendingTaskDeletes].map(deleteTaskFromCloud));
   for (const id of [...state.pendingRecordDeletes]) await deleteRecordFromCloud(id);
   saveLocal();
-  setSyncStatus(taskResult.error || recordResult.error ? "同步失败" : "已同步", !(taskResult.error || recordResult.error));
+  const syncFailed = taskResult.error || recordResult.error || taskDeleteResults.some((result) => !result.ok);
+  setSyncStatus(syncFailed ? "同步失败" : "已同步", !syncFailed);
 }
 async function loadFromCloud() {
   if (!cloudUser || !cloud) return;
