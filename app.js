@@ -526,8 +526,6 @@ function updateAuthUI() {
 function showView(name) {
   document.querySelectorAll(".tab").forEach((tab) => tab.classList.toggle("is-active", tab.dataset.view === name));
   document.querySelectorAll(".view").forEach((section) => section.classList.toggle("is-visible", section.id === `${name}View`));
-  $(".app-shell").classList.toggle("is-thoughts-open", name === "thoughts");
-  $("#thoughtEntryButton").classList.toggle("is-active", name === "thoughts");
   if (name === "thoughts") updateThoughtExpanders();
 }
 
@@ -558,7 +556,7 @@ function renderDateControls() {
   $("#todayLabel").textContent = formatDate(selectedDate);
   $("#tasksHeading").textContent = selectedDate === todayKey() ? "今天准备做什么？" : "这一天准备做什么？";
   $("#booksDateLabel").textContent = `${formatDate(selectedDate)}的阅读记录`;
-  $("#thoughtsDateLabel").textContent = formatDate(selectedDate);
+  $("#thoughtsDateLabel").textContent = "全部思考";
   $("#nextDateButton").disabled = false;
 }
 function setSelectedDate(value) {
@@ -650,7 +648,7 @@ function updateThoughtExpanders() {
   });
 }
 function renderThoughts() {
-  const thoughts = state.thoughts.filter((thought) => (thought.date || localDateKey(new Date(thought.createdAt))) === selectedDate).sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+  const thoughts = [...state.thoughts].sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
   $("#thoughtList").innerHTML = thoughts.map((thought) => `<article class="thought-card" data-thought-open="${thought.id}" role="button" tabindex="0"><div class="thought-card-header"><div class="thought-card-ident"><span class="thought-card-date">${formatDateTime(thought.createdAt)}</span><span class="thought-card-title">${escapeHtml(thought.title || deriveThoughtTitle(thought.content || ""))}</span></div><div class="thought-card-status"><span class="summary-status ${thoughtStatusClass(thought)}">${thoughtSyncMeta(thought)}</span>${thoughtActionControl(thought)}</div></div><p class="thought-card-copy ${expandedThoughtIds.has(thought.id) ? "is-expanded" : ""}" data-thought-copy="${thought.id}">${escapeHtml(thought.content)}</p><div class="thought-card-footer"><span>${thoughtTimeLabel(thought)}</span><div class="thought-card-actions">${thought.syncState === "failed" ? `<button class="text-button" type="button" data-thought-retry="${thought.id}">重试</button>` : ""}<button class="text-button thought-expand-button" type="button" data-thought-expand="${thought.id}" hidden>显示全部</button></div></div></article>`).join("");
   $("#thoughtEmpty").hidden = thoughts.length > 0;
   const hasFailed = thoughts.some((thought) => thought.syncState === "failed");
@@ -699,7 +697,6 @@ async function saveThoughtEdit(event) {
   thought.title = title;
   thought.content = content;
   thought.updatedAt = new Date().toISOString();
-  thought.date = selectedDate;
   thought.syncState = cloudUser ? "syncing" : "local";
   thought.syncError = "";
   queueThoughtUpsert(thought.id);
@@ -838,8 +835,6 @@ $("#retrySyncButton").addEventListener("click", async () => {
     await prepareOwnerLogin();
   }
 });
-$("#thoughtEntryButton").addEventListener("click", () => showView("thoughts"));
-$("#thoughtBackButton").addEventListener("click", () => showView("tasks"));
 $("#thoughtForm").addEventListener("submit", saveThought);
 $("#thoughtEditForm").addEventListener("submit", saveThoughtEdit);
 $("#thoughtEditClose").addEventListener("click", () => $("#thoughtEditDialog").close());

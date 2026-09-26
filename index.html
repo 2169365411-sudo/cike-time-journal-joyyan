@@ -8,7 +8,7 @@
     <link rel="manifest" href="right-now.webmanifest" />
     <link rel="icon" href="right-now-mark-192-v2.png" type="image/png" />
     <link rel="apple-touch-icon" href="right-now-apple-touch-icon.png" />
-    <link rel="stylesheet" href="styles.css?v=12" />
+    <link rel="stylesheet" href="styles.css?v=13" />
     <title>RIGHT NOW</title>
   </head>
   <body>
@@ -35,6 +35,7 @@
         <button class="tab" data-view="timeline" type="button">24 HOURS</button>
         <button class="tab" data-view="stats" type="button">STATISTICS</button>
         <button class="tab" data-view="books" type="button">READING NOTES</button>
+        <button class="tab" data-view="thoughts" type="button">THOUGHTS</button>
       </nav>
 
       <section class="view is-visible" id="tasksView" aria-labelledby="tasksHeading">
@@ -119,7 +120,6 @@
 
       <section class="view thoughts-view" id="thoughtsView" aria-labelledby="thoughtsHeading">
         <div class="thoughts-heading">
-          <button class="text-button thought-back-button" id="thoughtBackButton" type="button">‹ 返回 RIGHT NOW</button>
           <p class="date-label">THOUGHTS</p>
           <p class="date-label" id="thoughtsDateLabel"></p>
           <h2 id="thoughtsHeading">写下此刻真正想明白的事</h2>
@@ -136,7 +136,6 @@
         </section>
       </section>
 
-      <button class="thought-entry" id="thoughtEntryButton" type="button">THOUGHTS <span aria-hidden="true">→</span></button>
       <footer class="footer-note">内容优先保存在本机，并在连接后同步</footer>
     </main>
     <dialog class="calendar-dialog" id="dateCalendar">
@@ -182,6 +181,6 @@
     </dialog>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=36"></script>
+    <script src="app.js?v=37"></script>
   </body>
 </html>

@@ -15,3 +15,5 @@
 .book-card-copy{border:0;background:transparent;color:inherit;text-align:left}
 @media(max-width:700px){#exportDataButton{display:inline-block}}
 .book-card-copy{flex:1}.book-card-actions{display:flex;align-items:flex-start;gap:2px;padding:8px 6px 0 0;opacity:0;transition:opacity .15s}.book-card:hover .book-card-actions,.book-card:focus-within .book-card-actions{opacity:1}.book-card-action{border:0;padding:4px;background:transparent;color:var(--muted);font-size:14px}.book-card-action:hover{color:var(--ink)}.book-card-action.is-danger{color:#9a6b68}.toast{position:fixed;right:20px;bottom:20px;z-index:30;max-width:min(90vw,360px);padding:10px 14px;border:1px solid var(--line);border-radius:5px;background:var(--ink);color:#fff;font-size:13px;opacity:0;pointer-events:none;transform:translateY(8px);transition:opacity .2s,transform .2s}.toast.is-visible{opacity:1;transform:translateY(0)}
+.app-shell.is-thoughts-open .tabs{display:flex}.thoughts-heading .date-label{margin:0 0 7px}.thought-back-button{display:none}
+@media(max-width:700px){.tabs{grid-template-columns:repeat(5,1fr)}.app-shell.is-thoughts-open .tabs{display:grid}}

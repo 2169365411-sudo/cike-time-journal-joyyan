@@ -13,7 +13,13 @@
 
 网页目前已经可以正常投入使用。线上页面应以带 `?date=2026-09-25` 的地址为准；此前不带日期参数的访问曾返回 GitHub Pages 404，不要据此判断当前部署状态。
 
-本轮功能已提交并推送：`b9c354a feat: add backup and reading note controls`。GitHub Pages 已发布，线上带日期参数的页面已确认显示“导出数据”入口；工作区干净。
+本轮功能已提交并推送：`b9c354a feat: add backup and reading note controls`。GitHub Pages 已发布，线上带日期参数的页面已确认显示“导出数据”入口。
+
+本交接文档的上一版已随 `2272663 docs: update project handoff status` 推送至 `github/main`（远端名称为 `github`，不是 `origin`）。
+
+本窗口已完成导航调整与思考浏览调整，但尚未提交或推送：THOUGHTS 已从页面底部的独立入口移入主导航，成为与 MISSION、24 HOURS、STATISTICS、READING NOTES 并列的第五个功能区。进入思考页后主导航保持可见；手机端底栏已改为五等分。THOUGHTS 不再受全局日期切换影响，进入后始终展示全部思考；编辑思考也不再因当前日期而改写其原始归档日期。
+
+当前工作区含待提交改动：`HANDOFF.md`、`index.html`、`app.js`、`styles.css`、`sw.js`。这些改动均属于本轮导航调整或本交接文档；提交前请再次确认差异，不要覆盖或清理。
 
 已完成校验：`node --check app.js`、`git diff --check`、本地隔离预览、390px 移动端布局检查。未登录云端，未执行任何真实数据删除。
 
@@ -47,19 +53,22 @@
 
 ## 关键版本信息
 
-- `index.html` 使用 `app.js?v=36`。
-- `sw.js` 已更新为缓存版本 `right-now-v31`，并预缓存 `app.js?v=36`。
+- `index.html` 使用 `app.js?v=37`。
+- `index.html` 使用 `styles.css?v=13`。
+- `sw.js` 已更新为缓存版本 `right-now-v33`，并预缓存 `app.js?v=37` 与 `styles.css?v=13`。
 
 ## 下一步建议
 
 1. 如需完整云端回归，使用线上地址登录后测试导出、编辑书籍、更新/删除书摘与心得；删除书籍仅限明确可删除的测试书籍，并确认关联笔记和阅读图片同步删除。
-2. 后续改动提交与推送使用以下 Git 可执行文件：
+2. 检查主导航：桌面端应显示 5 个并列标签；手机端底栏应显示 5 等分标签；点击 THOUGHTS 后导航不应消失，切换全局日期也应始终显示全部思考。
+3. 执行 `git status --short --branch` 与 `git diff --check`。当前预期有上述 5 个待提交文件；如出现其他未预期改动，保留并报告，不要清理。
+4. 后续改动提交与推送使用以下 Git 可执行文件，并使用远端名称 `github`：
 
 ```text
 /Users/joyyan/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback/git
 ```
 
-3. 推送后重新打开线上地址，确认 `app.js?v=36` 已生效。
+5. 推送后重新打开线上地址，确认 `app.js?v=37`、`styles.css?v=13`、缓存版本 `right-now-v33`、五个并列导航和全部思考浏览均已生效。
 
 ## 注意事项
 
