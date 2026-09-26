@@ -25,6 +25,7 @@
           <div><span class="sync-icon" id="syncDot" aria-hidden="true">✓</span><span id="syncStatus">本机模式</span></div>
           <button class="logout-button" id="emailConfirmButton" type="button">连接同步</button>
           <button class="logout-button" id="retrySyncButton" type="button" hidden>同步</button>
+          <button class="logout-button" id="exportDataButton" type="button">导出数据</button>
           <button class="icon-button" id="installButton" type="button" aria-label="安装到主屏幕" title="安装到主屏幕" hidden>＋</button>
         </section>
       </header>
@@ -171,7 +172,16 @@
         <div class="form-footer"><span class="thought-save-status" id="thoughtEditStatus"></span><button class="primary-button" type="submit">保存修改</button></div>
       </form>
     </dialog>
+    <dialog class="record-dialog" id="bookEditDialog">
+      <form class="record-edit-form" id="bookEditForm">
+        <div class="dialog-heading"><div><p class="date-label">READING NOTES</p><h3>编辑书籍</h3></div><button class="delete-button" type="button" id="bookEditClose" aria-label="关闭编辑" title="关闭">×</button></div>
+        <input id="bookEditTitle" type="text" maxlength="80" placeholder="书名" required />
+        <input id="bookEditAuthor" type="text" maxlength="60" placeholder="作者（可选）" />
+        <div class="form-footer"><span></span><button class="primary-button" type="submit">保存修改</button></div>
+      </form>
+    </dialog>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=35"></script>
+    <script src="app.js?v=36"></script>
   </body>
 </html>

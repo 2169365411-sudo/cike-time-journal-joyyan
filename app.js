@@ -86,6 +86,27 @@ const summaryKey = (summary) => `${summary.date}:${summary.slot}`;
 const summaryPrompts = ["今天最值得记录的一件事", "今天学到或意识到什么", "明天最重要的一件事"];
 
 function setSyncStatus(text, online = false) { $("#syncStatus").textContent = text; $("#syncDot").classList.toggle("is-online", online); }
+let toastTimer;
+function showToast(message) { const toast = $("#toast"); if (!toast) return; toast.textContent = message; toast.classList.add("is-visible"); clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove("is-visible"), 2600); }
+async function exportAllData() {
+  if (!cloudUser || !cloud) { showToast("请先登录同步账号"); return; }
+  const button = $("#exportDataButton");
+  button.disabled = true;
+  try {
+    const tableNames = ["time_tasks", "time_records", "daily_summaries", "thought_entries", "reading_books", "reading_notes"];
+    const results = await Promise.all(tableNames.map((table) => cloud.from(table).select("*").eq("user_id", cloudUser.id)));
+    const failed = results.find((result) => result.error);
+    if (failed) throw failed.error;
+    const backup = { exported_at: new Date().toISOString(), user_id: cloudUser.id, data: Object.fromEntries(tableNames.map((table, index) => [table, results[index].data || []])) };
+    const stamp = localDateKey();
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a"); link.href = url; link.download = `right-now-backup-${stamp}.json`; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast("数据备份已下载");
+  } catch (error) { showToast(`导出失败：${error.message || "网络或权限异常"}`); }
+  finally { button.disabled = false; }
+}
 function updateCategorySwatch(selectId, swatchId) {
   const category = categories[$(selectId).value] || categories.fun;
   $(swatchId).style.setProperty("--category-color", category.color);
@@ -141,9 +162,9 @@ async function loadFromCloud() {
   if (!cloudUser || !cloud) return;
   setSyncStatus("读取云端", true);
   const [taskResult, recordResult, summaryResult] = await Promise.all([
-    cloud.from("time_tasks").select("*"),
-    cloud.from("time_records").select("*"),
-    cloud.from("daily_summaries").select("*")
+    cloud.from("time_tasks").select("*").eq("user_id", cloudUser.id),
+    cloud.from("time_records").select("*").eq("user_id", cloudUser.id),
+    cloud.from("daily_summaries").select("*").eq("user_id", cloudUser.id)
   ]);
   if (taskResult.error || recordResult.error) { setSyncStatus("同步失败"); return; }
   const pendingTasks = new Map(state.tasks.filter((task) => state.pendingTaskUpserts.includes(task.id)).map((task) => [task.id, task]));
@@ -182,7 +203,7 @@ async function loadFromCloud() {
 }
 async function deleteTaskFromCloud(id) {
   if (!cloudUser || !cloud) return { ok: false, local: true };
-  const { error } = await cloud.from("time_tasks").delete().eq("id", id);
+  const { error } = await cloud.from("time_tasks").delete().eq("id", id).eq("user_id", cloudUser.id);
   if (error) { setSyncStatus(`删除任务失败：${error.message || "网络或权限异常"}`, false); return { ok: false }; }
   state.pendingTaskDeletes = state.pendingTaskDeletes.filter((pendingId) => pendingId !== id);
   saveLocal();
@@ -204,7 +225,7 @@ async function syncRecordToCloud(record) {
 async function deleteRecordFromCloud(id) {
   if (!cloudUser || !cloud) return { ok: false, local: true };
   setSyncStatus("正在删除", true);
-  const { error } = await cloud.from("time_records").delete().eq("id", id);
+  const { error } = await cloud.from("time_records").delete().eq("id", id).eq("user_id", cloudUser.id);
   if (error) {
     setSyncStatus(recordErrorMessage(error, "删除"), false);
     return { ok: false };
@@ -261,7 +282,7 @@ async function syncDailySummaryToCloud(summary) {
 async function deleteDailySummaryFromCloud(summary) {
   if (!cloudUser || !cloud) return { ok: true, local: true };
   setSyncStatus("正在删除", true);
-  const { error } = await cloud.from("daily_summaries").delete().eq("id", summary.id);
+  const { error } = await cloud.from("daily_summaries").delete().eq("id", summary.id).eq("user_id", cloudUser.id);
   if (error) {
     summary.syncState = "failed";
     summary.pendingAction = "delete";
@@ -304,7 +325,7 @@ async function syncBooksToCloud() {
 }
 async function loadBooksFromCloud() {
   if (!cloudUser || !cloud) return;
-  const [bookResult, noteResult] = await Promise.all([cloud.from("reading_books").select("*").order("updated_at", { ascending: false }), cloud.from("reading_notes").select("*").order("created_at", { ascending: false })]);
+  const [bookResult, noteResult] = await Promise.all([cloud.from("reading_books").select("*").eq("user_id", cloudUser.id).order("updated_at", { ascending: false }), cloud.from("reading_notes").select("*").eq("user_id", cloudUser.id).order("created_at", { ascending: false })]);
   if (bookResult.error || noteResult.error) { setSyncStatus("阅读笔记同步失败"); return; }
   if (!bookResult.data.length && state.books.length) { await syncBooksToCloud(); return; }
   const notesWithImages = await Promise.all(noteResult.data.map(async (note) => ({ ...note, image: await signedImage(note.image_path) })));
@@ -314,8 +335,43 @@ async function loadBooksFromCloud() {
 }
 async function deleteNoteFromCloud(note) {
   if (!cloudUser || !cloud) return;
-  await cloud.from("reading_notes").delete().eq("id", note.id);
+  await cloud.from("reading_notes").delete().eq("id", note.id).eq("user_id", cloudUser.id);
   if (note.imagePath) await cloud.storage.from("reading-images").remove([note.imagePath]);
+}
+async function updateBookInCloud(book) {
+  if (!cloudUser || !cloud) return { ok: false, local: true };
+  const { error } = await cloud.from("reading_books").update({ title: book.title, author: book.author || null, rating: book.rating || 0, updated_at: new Date().toISOString() }).eq("id", book.id).eq("user_id", cloudUser.id);
+  if (error) { setSyncStatus(`书籍修改失败：${error.message || "网络或权限异常"}`, false); return { ok: false }; }
+  return { ok: true };
+}
+async function deleteBookFromCloud(book) {
+  if (!cloudUser || !cloud) return { ok: false, local: true };
+  setSyncStatus("正在删除", true);
+  const { data: notes, error: notesReadError } = await cloud.from("reading_notes").select("image_path").eq("book_id", book.id).eq("user_id", cloudUser.id);
+  if (notesReadError) { setSyncStatus(`删除失败：${notesReadError.message}`, false); return { ok: false }; }
+  const { error: notesError } = await cloud.from("reading_notes").delete().eq("book_id", book.id).eq("user_id", cloudUser.id);
+  if (notesError) { setSyncStatus(`删除笔记失败：${notesError.message}`, false); return { ok: false }; }
+  const paths = (notes || []).map((note) => note.image_path).filter(Boolean);
+  if (paths.length) await cloud.storage.from("reading-images").remove(paths);
+  const { error } = await cloud.from("reading_books").delete().eq("id", book.id).eq("user_id", cloudUser.id);
+  if (error) { setSyncStatus(`删除书籍失败：${error.message}`, false); return { ok: false }; }
+  setSyncStatus("已同步", true); return { ok: true };
+}
+async function saveReadingNote(book, type, text, image) {
+  if (!cloudUser || !cloud) return { ok: false, local: true };
+  const field = type === "excerpt" ? "excerpts" : "reflections";
+  const note = (book[field] || [])[0] || { id: uid(), text: "", image: "" };
+  let imagePath = note.imagePath || null;
+  if (image?.startsWith("data:")) {
+    imagePath = `${cloudUser.id}/${book.id}/${note.id}.jpg`;
+    const blob = await (await fetch(image)).blob();
+    const { error } = await cloud.storage.from("reading-images").upload(imagePath, blob, { upsert: true, contentType: "image/jpeg" });
+    if (error) return { ok: false, error };
+  }
+  const { error } = await cloud.from("reading_notes").upsert({ id: note.id, book_id: book.id, user_id: cloudUser.id, note_type: type, body: text || null, image_path: imagePath }, { onConflict: "id" });
+  if (error) return { ok: false, error };
+  note.text = text; note.image = image || note.image || ""; note.imagePath = imagePath; book[field] = [note, ...(book[field] || []).filter((item) => item.id !== note.id)];
+  return { ok: true };
 }
 function thoughtSyncMeta(thought) {
   if (thought.syncState === "syncing") return "正在同步";
@@ -358,7 +414,7 @@ async function syncThoughtToCloud(thought) {
 async function deleteThoughtFromCloud(id) {
   if (!cloudUser || !cloud) return { ok: false, local: true };
   setSyncStatus("正在删除思考", true);
-  const { error } = await cloud.from("thought_entries").delete().eq("id", id);
+  const { error } = await cloud.from("thought_entries").delete().eq("id", id).eq("user_id", cloudUser.id);
   if (error) {
     setSyncStatus(thoughtErrorMessage(error, "删除"), false);
     return { ok: false };
@@ -377,7 +433,7 @@ async function syncThoughtsToCloud() {
 }
 async function loadThoughtsFromCloud() {
   if (!cloudUser || !cloud) return;
-  const { data, error } = await cloud.from("thought_entries").select("*").order("created_at", { ascending: false });
+  const { data, error } = await cloud.from("thought_entries").select("*").eq("user_id", cloudUser.id).order("created_at", { ascending: false });
   if (error) { setSyncStatus(thoughtErrorMessage(error, "读取"), false); return; }
   const localPending = new Map(state.thoughts.filter((thought) => state.pendingThoughtUpserts.includes(thought.id)).map((thought) => [thought.id, thought]));
   const cloudThoughts = new Map(data.map((thought) => [thought.id, { id: thought.id, title: thought.title || deriveThoughtTitle(thought.content || ""), content: thought.content, createdAt: thought.created_at, updatedAt: thought.updated_at, syncState: "synced", syncError: "" }]));
@@ -668,18 +724,24 @@ async function removeThought(id) {
 
 function stars(rating) { return [1, 2, 3, 4, 5].map((value) => `<button class="star-button ${value <= rating ? "is-on" : ""}" type="button" data-rate="${value}" aria-label="${value} 星">★</button>`).join(""); }
 function noteItem(note, type) { return `<article class="note-item"><div class="note-copy">${note.text ? `<p>${escapeHtml(note.text)}</p>` : ""}${note.image ? `<img src="${note.image}" alt="${type}图片" />` : ""}</div><button class="delete-button" type="button" data-note-delete="${note.id}" data-note-type="${type}" aria-label="删除${type}" title="删除">×</button></article>`; }
+function noteFor(book, type) { return (book[type === "excerpt" ? "excerpts" : "reflections"] || [])[0] || null; }
 function renderBooks(showNew = false) {
   const list = $("#bookList");
-  list.innerHTML = state.books.map((book) => `<button class="book-card ${book.id === selectedBookId ? "is-selected" : ""}" type="button" data-book-select="${book.id}"><span class="book-spine"></span><span class="book-card-copy"><strong>${escapeHtml(book.title)}</strong><small>${escapeHtml(book.author || "未填写作者")}</small><span class="book-stars">${"★".repeat(book.rating || 0)}${"☆".repeat(5 - (book.rating || 0))}</span></span></button>`).join("");
+  list.innerHTML = state.books.map((book) => `<article class="book-card ${book.id === selectedBookId ? "is-selected" : ""}"><span class="book-spine"></span><button class="book-card-copy" type="button" data-book-select="${book.id}"><strong>${escapeHtml(book.title)}</strong><small>${escapeHtml(book.author || "未填写作者")}</small><span class="book-stars">${"★".repeat(book.rating || 0)}${"☆".repeat(5 - (book.rating || 0))}</span></button><span class="book-card-actions"><button class="book-card-action" type="button" data-book-edit="${book.id}" aria-label="编辑书籍" title="编辑">✏️</button><button class="book-card-action is-danger" type="button" data-book-delete="${book.id}" aria-label="删除书籍" title="删除">🗑️</button></span></article>`).join("");
   if (!state.books.length) list.innerHTML = '<div class="book-empty">书架还是空的</div>';
   const book = state.books.find((item) => item.id === selectedBookId);
   if (showNew || !book) { $("#bookDetail").innerHTML = `<form class="book-create-form" id="newBookForm"><p class="date-label">NEW BOOK</p><h3>把一本书放进书架</h3><input id="bookTitle" type="text" maxlength="80" placeholder="书名" required /><input id="bookAuthor" type="text" maxlength="60" placeholder="作者（可选）" /><button class="primary-button" type="submit">创建</button></form>`; return; }
   const excerpts = (book.excerpts || []).map((note) => noteItem(note, "书摘")).join("") || '<p class="note-empty">还没有书摘</p>';
   const reflections = (book.reflections || []).map((note) => noteItem(note, "心得")).join("") || '<p class="note-empty">还没有读书心得</p>';
-  $("#bookDetail").innerHTML = `<div class="book-head"><div><p class="date-label">${escapeHtml(book.author || "READING NOTE")}</p><h3>${escapeHtml(book.title)}</h3></div><div class="rating" aria-label="书籍评分">${stars(book.rating || 0)}</div></div><div class="note-section"><div class="note-section-title"><h4>书摘</h4><span>截图或文字片段</span></div><form class="note-form" id="excerptForm"><textarea id="excerptText" maxlength="1000" placeholder="摘下让你停下来的那一段文字"></textarea><label class="upload-button">上传截图<input id="excerptImage" type="file" accept="image/*" /></label><button class="primary-button" type="submit">保存书摘</button></form><div class="note-list">${excerpts}</div></div><div class="note-section"><div class="note-section-title"><h4>读书心得</h4><span>图片或文字</span></div><form class="note-form" id="reflectionForm"><textarea id="reflectionText" maxlength="1600" placeholder="这本书给你留下了什么？"></textarea><label class="upload-button">上传图片<input id="reflectionImage" type="file" accept="image/*" /></label><button class="primary-button" type="submit">保存心得</button></form><div class="note-list">${reflections}</div></div>`;
+  const excerpt = noteFor(book, "excerpt"); const reflection = noteFor(book, "reflection");
+  $("#bookDetail").innerHTML = `<div class="book-head"><div><p class="date-label">${escapeHtml(book.author || "READING NOTE")}</p><h3>${escapeHtml(book.title)}</h3></div><div class="rating" aria-label="书籍评分">${stars(book.rating || 0)}</div></div><div class="note-section"><div class="note-section-title"><h4>书摘</h4><span>截图或文字片段</span></div><form class="note-form" id="excerptForm"><textarea id="excerptText" maxlength="1000" placeholder="摘下让你停下来的那一段文字">${escapeHtml(excerpt?.text || "")}</textarea><label class="upload-button">上传截图<input id="excerptImage" type="file" accept="image/*" /></label><button class="primary-button" type="submit">${excerpt ? "更新书摘" : "保存书摘"}</button><button class="text-button" type="button" data-note-clear="excerpt" ${excerpt ? "" : "disabled"}>删除书摘</button></form><div class="note-list">${excerpts}</div></div><div class="note-section"><div class="note-section-title"><h4>读书心得</h4><span>图片或文字</span></div><form class="note-form" id="reflectionForm"><textarea id="reflectionText" maxlength="1600" placeholder="这本书给你留下了什么？">${escapeHtml(reflection?.text || "")}</textarea><label class="upload-button">上传图片<input id="reflectionImage" type="file" accept="image/*" /></label><button class="primary-button" type="submit">${reflection ? "更新心得" : "保存心得"}</button><button class="text-button" type="button" data-note-clear="reflection" ${reflection ? "" : "disabled"}>删除心得</button></form><div class="note-list">${reflections}</div></div>`;
 }
 function imageData(file) { return new Promise((resolve) => { if (!file) return resolve(""); const reader = new FileReader(); reader.onload = () => { const image = new Image(); image.onload = () => { const max = 1200; const scale = Math.min(1, max / Math.max(image.width, image.height)); const canvas = document.createElement("canvas"); canvas.width = Math.round(image.width * scale); canvas.height = Math.round(image.height * scale); canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height); resolve(canvas.toDataURL("image/jpeg", .82)); }; image.src = reader.result; }; reader.readAsDataURL(file); }); }
 function saveBooks() { saveLocal(); renderBooks(); syncBooksToCloud(); }
+function openBookEditor(id) { const book = state.books.find((item) => item.id === id); if (!book) return; $("#bookEditForm").dataset.bookId = id; $("#bookEditTitle").value = book.title; $("#bookEditAuthor").value = book.author || ""; $("#bookEditDialog").showModal(); }
+async function saveBookEdit(event) { event.preventDefault(); const book = state.books.find((item) => item.id === event.currentTarget.dataset.bookId); const title = $("#bookEditTitle").value.trim(); if (!book || !title) return; book.title = title; book.author = $("#bookEditAuthor").value.trim(); saveLocal(); renderBooks(); $("#bookEditDialog").close(); const result = await updateBookInCloud(book); showToast(result.ok || result.local ? "书籍修改成功" : "书籍修改失败"); }
+async function removeBook(id) { const book = state.books.find((item) => item.id === id); if (!book || !window.confirm(`确定删除《${book.title}》及其全部书摘和心得吗？`)) return; state.books = state.books.filter((item) => item.id !== id); selectedBookId = state.books[0]?.id || null; saveLocal(); renderBooks(); const result = await deleteBookFromCloud(book); showToast(result.ok || result.local ? "书籍及笔记已删除" : "删除失败，请重试"); }
+async function clearSelectedNote(type) { const book = state.books.find((item) => item.id === selectedBookId); const note = book && noteFor(book, type); if (!book || !note || !window.confirm(`确定删除这条${type === "excerpt" ? "书摘" : "心得"}吗？`)) return; const field = type === "excerpt" ? "excerpts" : "reflections"; book[field] = (book[field] || []).filter((item) => item.id !== note.id); saveLocal(); renderBooks(); await deleteNoteFromCloud(note); showToast(`已删除${type === "excerpt" ? "书摘" : "心得"}`); }
 
 function escapeHtml(value) { const div = document.createElement("div"); div.textContent = value; return div.innerHTML; }
 function updateRecordCount() { $("#recordTitleCount").textContent = `${$("#recordTitle").value.length} / 500`; }
@@ -781,10 +843,19 @@ $("#thoughtBackButton").addEventListener("click", () => showView("tasks"));
 $("#thoughtForm").addEventListener("submit", saveThought);
 $("#thoughtEditForm").addEventListener("submit", saveThoughtEdit);
 $("#thoughtEditClose").addEventListener("click", () => $("#thoughtEditDialog").close());
+$("#bookEditForm").addEventListener("submit", saveBookEdit);
+$("#bookEditClose").addEventListener("click", () => $("#bookEditDialog").close());
+$("#exportDataButton").addEventListener("click", exportAllData);
 $("#newBookButton").addEventListener("click", () => renderBooks(true));
 document.addEventListener("click", (event) => {
   const bookButton = event.target.closest("[data-book-select]");
   if (bookButton) { selectedBookId = bookButton.dataset.bookSelect; renderBooks(); return; }
+  const bookEdit = event.target.closest("[data-book-edit]");
+  if (bookEdit) { openBookEditor(bookEdit.dataset.bookEdit); return; }
+  const bookDelete = event.target.closest("[data-book-delete]");
+  if (bookDelete) { removeBook(bookDelete.dataset.bookDelete); return; }
+  const noteClear = event.target.closest("[data-note-clear]");
+  if (noteClear) { clearSelectedNote(noteClear.dataset.noteClear); return; }
   const star = event.target.closest("[data-rate]");
   if (star) { const book = state.books.find((item) => item.id === selectedBookId); if (book) { book.rating = Number(star.dataset.rate); saveBooks(); } return; }
   const deleteNote = event.target.closest("[data-note-delete]");
@@ -792,9 +863,9 @@ document.addEventListener("click", (event) => {
 });
 document.addEventListener("submit", async (event) => {
   if (event.target.matches("[data-summary-form]")) { await saveDailySummary(event); return; }
-  if (event.target.id === "newBookForm") { event.preventDefault(); const title = $("#bookTitle").value.trim(); if (!title) return; const book = { id: uid(), title, author: $("#bookAuthor").value.trim(), rating: 0, excerpts: [], reflections: [] }; state.books.push(book); selectedBookId = book.id; saveBooks(); return; }
+  if (event.target.id === "newBookForm") { event.preventDefault(); const title = $("#bookTitle").value.trim(); if (!title) return; const book = { id: uid(), title, author: $("#bookAuthor").value.trim(), rating: 0, excerpts: [], reflections: [] }; state.books.push(book); selectedBookId = book.id; saveBooks(); showToast("书籍已创建"); return; }
   if (!["excerptForm", "reflectionForm"].includes(event.target.id)) return;
-  event.preventDefault(); const book = state.books.find((item) => item.id === selectedBookId); if (!book) return; const isExcerpt = event.target.id === "excerptForm"; const text = $(isExcerpt ? "#excerptText" : "#reflectionText").value.trim(); const image = await imageData($(isExcerpt ? "#excerptImage" : "#reflectionImage").files[0]); if (!text && !image) return; const field = isExcerpt ? "excerpts" : "reflections"; book[field] ||= []; book[field].unshift({ id: uid(), text, image }); saveBooks();
+  event.preventDefault(); const book = state.books.find((item) => item.id === selectedBookId); if (!book) return; const isExcerpt = event.target.id === "excerptForm"; const type = isExcerpt ? "excerpt" : "reflection"; const text = $(isExcerpt ? "#excerptText" : "#reflectionText").value.trim(); const image = await imageData($(isExcerpt ? "#excerptImage" : "#reflectionImage").files[0]); if (!text && !image && !noteFor(book, type)) return; const field = isExcerpt ? "excerpts" : "reflections"; const note = noteFor(book, type) || { id: uid(), text: "", image: "" }; note.text = text; if (image) note.image = image; book[field] = [note, ...(book[field] || []).filter((item) => item.id !== note.id)]; saveLocal(); renderBooks(); const result = await saveReadingNote(book, type, text, image || note.image); if (!result.ok && !result.local) showToast(`保存失败：${result.error?.message || "网络或权限异常"}`); else showToast(isExcerpt ? "书摘已更新" : "心得已更新");
 });
 $("#taskForm").addEventListener("submit", (event) => { event.preventDefault(); const title = $("#taskTitle").value.trim(); if (!title) return; const task = { id: uid(), title, time: $("#taskTime").value, date: selectedDate, done: false }; state.tasks.push(task); queueTaskUpsert(task.id); save(); event.target.reset(); renderTasks(); $("#taskTitle").focus(); });
 $("#recordForm").addEventListener("submit", async (event) => { event.preventDefault(); const title = $("#recordTitle").value.trim(); const start = $("#recordStart").value; const end = $("#recordEnd").value; if (!title || title.length > 500 || !start || !end || minutes(end) <= minutes(start)) { setSyncStatus("请填写内容，并确认结束时间晚于开始时间"); return; } const record = { id: uid(), title, start, end, category: $("#recordCategory").value, date: selectedDate }; state.records.push(record); queueRecordUpsert(record.id); saveLocal(); event.target.reset(); updateRecordCount(); renderRecords(); renderStats(); renderDateControls(); await syncRecordToCloud(record); $("#recordTitle").focus(); });
