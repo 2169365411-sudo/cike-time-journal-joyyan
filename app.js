@@ -20,7 +20,7 @@ const dateFromKey = (value) => new Date(`${value}T00:00:00`);
 const saveLocal = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 const SUPABASE_URL = "https://wacwjwtmmziakklcyuvt.supabase.co";
 const SUPABASE_KEY = "sb_publishable_WygT01COp2jBZOKQMmQt-A_SQfVzgI5";
-const OWNER_EMAIL = "2169365411@qq.com";
+const OWNER_EMAIL = "signorecarnevale@163.com";
 const PUBLIC_APP_URL = "https://2169365411-sudo.github.io/cike-time-journal-joyyan/";
 const MIGRATION_KEY = "time-block-pending-migration";
 const cloud = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY, {
@@ -407,21 +407,21 @@ async function prepareOwnerLogin() {
       cloudUser = null;
       updateAuthUI();
     }
-    setSyncStatus("正在发送 QQ 邮箱登录链接");
+    setSyncStatus("正在发送邮箱登录链接");
     const { error } = await cloud.auth.signInWithOtp({ email: OWNER_EMAIL, options: { emailRedirectTo: emailRedirectUrl(migration), shouldCreateUser: false } });
-    setSyncStatus(error ? `登录链接发送失败：${error.message}` : "链接已发送，请复制 QQ 邮箱中的登录链接并粘贴到 Safari 打开");
+    setSyncStatus(error ? `登录链接发送失败：${error.message}` : "链接已发送，请复制邮箱中的登录链接并粘贴到 Safari 打开");
   } finally { button.disabled = false; }
 }
 async function completePendingMigration() {
   const pending = pendingMigration();
   if (!pending || !cloudUser || cloudUser.is_anonymous || !cloud) return false;
-  if (!isOwner()) { setSyncStatus("请使用指定 QQ 邮箱完成确认"); return false; }
+  if (!isOwner()) { setSyncStatus("请使用指定邮箱完成确认"); return false; }
   setSyncStatus("正在迁移云端数据");
   const { error } = await cloud.rpc("claim_anonymous_migration", { p_source_user_id: pending.sourceUserId, p_token_hash: pending.tokenHash });
   if (error) { setSyncStatus(`数据迁移失败：${error.message}`); return false; }
   localStorage.removeItem(MIGRATION_KEY);
   await syncBooksToCloud();
-  setSyncStatus("数据已迁移到 QQ 邮箱", true);
+  setSyncStatus("数据已迁移到指定邮箱", true);
   return true;
 }
 async function initCloud() {
@@ -436,9 +436,9 @@ async function initCloud() {
     await loadBooksFromCloud();
     await loadThoughtsFromCloud();
   } else if (pendingMigration()) {
-    setSyncStatus("请用 QQ 邮箱登录");
+    setSyncStatus("请用指定邮箱登录");
   } else {
-    setSyncStatus("请用 QQ 邮箱登录");
+    setSyncStatus("请用指定邮箱登录");
   }
   cloud.auth.onAuthStateChange(async (_event, session) => { cloudUser = session?.user || null; updateAuthUI(); if (cloudUser) { await completePendingMigration(); await loadFromCloud(); await loadBooksFromCloud(); await loadThoughtsFromCloud(); } });
 }
@@ -457,12 +457,12 @@ function updateAuthUI() {
   const pending = !!pendingMigration();
   const signedIn = isOwner();
   $("#emailConfirmButton").hidden = signedIn;
-  $("#emailConfirmButton").textContent = pending ? "重新发送登录链接" : "发送 QQ 登录链接";
+  $("#emailConfirmButton").textContent = pending ? "重新发送登录链接" : "发送登录链接";
   $("#retrySyncButton").hidden = !cloudUser;
   $("#retrySyncButton").textContent = "立即同步";
   setSyncStatus(
     cloudUser ? (signedIn ? "已登录 QQ 邮箱" : "正在迁移旧数据") :
-    "请用 QQ 邮箱登录",
+    "请用指定邮箱登录",
     signedIn
   );
 }
