@@ -8,7 +8,7 @@
     <link rel="manifest" href="right-now.webmanifest" />
     <link rel="icon" href="right-now-mark-192-v2.png" type="image/png" />
     <link rel="apple-touch-icon" href="right-now-apple-touch-icon.png" />
-    <link rel="stylesheet" href="styles.css?v=13" />
+    <link rel="stylesheet" href="styles.css?v=14" />
     <title>RIGHT NOW</title>
   </head>
   <body>
@@ -107,21 +107,24 @@
 
       <section class="view" id="booksView" aria-labelledby="booksHeading">
         <div class="section-heading">
-          <div><p class="date-label" id="booksDateLabel"></p><h2 id="booksHeading">这一天的阅读记录</h2></div>
+          <div><h2 id="booksHeading">阅读笔记</h2></div>
           <button class="primary-button compact-button" id="newBookButton" type="button">新建书籍</button>
         </div>
         <div class="book-layout">
-          <aside class="book-list" id="bookList"></aside>
-          <div class="book-detail" id="bookDetail">
-            <div class="empty-state">先新建一本书，开始记录你的阅读。</div>
+          <div class="book-carousel" id="bookCarousel">
+            <div class="book-carousel-viewport" id="bookCarouselViewport">
+              <div class="book-list" id="bookList"></div>
+            </div>
+            <div class="book-carousel-dots" id="bookCarouselDots" aria-label="书籍轮播位置"></div>
           </div>
+          <section class="book-detail" id="bookDetail" aria-live="polite">
+            <div class="empty-state">先新建一本书，开始记录你的阅读。</div>
+          </section>
         </div>
       </section>
 
       <section class="view thoughts-view" id="thoughtsView" aria-labelledby="thoughtsHeading">
         <div class="thoughts-heading">
-          <p class="date-label">THOUGHTS</p>
-          <p class="date-label" id="thoughtsDateLabel"></p>
           <h2 id="thoughtsHeading">写下此刻真正想明白的事</h2>
         </div>
         <form class="thought-compose" id="thoughtForm">
@@ -171,16 +174,24 @@
         <div class="form-footer"><span class="thought-save-status" id="thoughtEditStatus"></span><button class="primary-button" type="submit">保存修改</button></div>
       </form>
     </dialog>
-    <dialog class="record-dialog" id="bookEditDialog">
+      <dialog class="record-dialog" id="bookEditDialog">
       <form class="record-edit-form" id="bookEditForm">
         <div class="dialog-heading"><div><p class="date-label">READING NOTES</p><h3>编辑书籍</h3></div><button class="delete-button" type="button" id="bookEditClose" aria-label="关闭编辑" title="关闭">×</button></div>
         <input id="bookEditTitle" type="text" maxlength="80" placeholder="书名" required />
         <input id="bookEditAuthor" type="text" maxlength="60" placeholder="作者（可选）" />
         <div class="form-footer"><span></span><button class="primary-button" type="submit">保存修改</button></div>
       </form>
-    </dialog>
-    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+      </dialog>
+      <dialog class="record-dialog" id="newBookDialog">
+        <form class="book-create-form" id="newBookForm">
+          <div class="dialog-heading"><div><p class="date-label">NEW BOOK</p><h3>把一本书放进书架</h3></div><button class="delete-button" id="newBookClose" type="button" aria-label="关闭新建书籍" title="关闭">×</button></div>
+          <input id="bookTitle" type="text" maxlength="80" placeholder="书名" required />
+          <input id="bookAuthor" type="text" maxlength="60" placeholder="作者（可选）" />
+          <button class="primary-button" type="submit">创建</button>
+        </form>
+      </dialog>
+      <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=37"></script>
+    <script src="app.js?v=38"></script>
   </body>
 </html>
