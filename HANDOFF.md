@@ -17,9 +17,9 @@
 
 本交接文档的上一版已随 `2272663 docs: update project handoff status` 推送至 `github/main`（远端名称为 `github`，不是 `origin`）。
 
-本窗口已完成导航调整与思考浏览调整，但尚未提交或推送：THOUGHTS 已从页面底部的独立入口移入主导航，成为与 MISSION、24 HOURS、STATISTICS、READING NOTES 并列的第五个功能区。进入思考页后主导航保持可见；手机端底栏已改为五等分。THOUGHTS 不再受全局日期切换影响，进入后始终展示全部思考；编辑思考也不再因当前日期而改写其原始归档日期。
+本轮导航调整与思考浏览调整已随 `13f139f feat: show all thoughts across dates` 推送至 `github/main`，并已在 GitHub Pages 线上地址复核。THOUGHTS 已从页面底部的独立入口移入主导航，成为与 MISSION、24 HOURS、STATISTICS、READING NOTES 并列的第五个功能区。进入思考页后主导航保持可见；手机端底栏已改为五等分。THOUGHTS 不再受全局日期切换影响，进入后始终展示全部思考；编辑思考也不再因当前日期而改写其原始归档日期。
 
-当前工作区含待提交改动：`HANDOFF.md`、`index.html`、`app.js`、`styles.css`、`sw.js`。这些改动均属于本轮导航调整或本交接文档；提交前请再次确认差异，不要覆盖或清理。
+线上复核结果：进入 THOUGHTS 显示“全部思考”；将全局日期从 2026-09-27 切至 2026-09-26 后，该提示与思考列表维持全部浏览模式。
 
 已完成校验：`node --check app.js`、`git diff --check`、本地隔离预览、390px 移动端布局检查。未登录云端，未执行任何真实数据删除。
 
